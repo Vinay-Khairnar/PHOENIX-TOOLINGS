@@ -1,0 +1,8 @@
+{
+  "name": "QuoteMate",
+  "description": "Fast and minimal quotation generator designed for businesses that receive supplier price lists in CSV format.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

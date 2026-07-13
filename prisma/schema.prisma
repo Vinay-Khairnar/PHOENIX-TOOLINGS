@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  price         Float
+  sku           String?  @unique
+  articleNumber String?  // Added article number
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  discount      Float    @default(0)
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quotes    Quote[]
+}
+
+model Quote {
+  id            String      @id @default(cuid())
+  quoteNumber   String      @unique
+  customerId    String
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  status        String      @default("DRAFT")
+  discount      Float       @default(0)
+  total         Float       @default(0)
+  contactPerson String?     // KIND ATTN field
+  refNumber     String?     // Reference number
+  refDate       String?     // Reference date
+  cgst          Float       @default(9)
+  sgst          Float       @default(9)
+  igst          Float       @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  items         QuoteItem[]
+}
+
+model QuoteItem {
+  id            String  @id @default(cuid())
+  quoteId       String
+  quote         Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId     String
+  name          String
+  price         Float
+  quantity      Int     @default(1)
+  discount      Float   @default(0)
+  articleNumber String?
+}
+
+model Settings {
+  id               String @id @default("default")
+  companyName      String @default("Phoenix Toolings")
+  address          String @default("A-51, MIDC Waluj, Aurangabad-431 136. (Maharashtra), India.")
+  email            String @default("gbs@phoenixtoolings.com")
+  phone            String @default("+91 9890448625")
+  gstNumber        String @default("27AFWPG3321F1ZH")
+  bankName         String @default("ICICI BANK")
+  accountNumber    String @default("145405004957")
+  ifscCode         String @default("ICIC0001454")
+  termsAndConditions String @default("1. Order To Be Release on PHOENIX TOOLINGS.\n2. Prices are net ex.works Ch. Sambhaji Nagar, packing & forwarding extra.\n3. Payment terms- 20% Advance along with Purchase order Balance Against PI.\n4. Delivery terms- 8 Week From The Date Of Order.\n5. Validity Of Quotation- 30 Days")
+}
