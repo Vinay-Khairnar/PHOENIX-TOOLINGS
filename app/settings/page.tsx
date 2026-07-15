@@ -14,6 +14,7 @@ interface SettingsData {
   accountNumber: string;
   ifscCode: string;
   termsAndConditions: string;
+  startingQuoteNumber: number;
 }
 
 const defaultSettings: SettingsData = {
@@ -26,6 +27,7 @@ const defaultSettings: SettingsData = {
   accountNumber: '145405004957',
   ifscCode: 'ICIC0001454',
   termsAndConditions: '1. Order To Be Release on PHOENIX TOOLINGS.\n2. Prices are net ex.works Ch. Sambhaji Nagar, packing & forwarding extra.\n3. Payment terms- 20% Advance along with Purchase order Balance Against PI.\n4. Delivery terms- 8 Week From The Date Of Order.\n5. Validity Of Quotation- 30 Days',
+  startingQuoteNumber: 1,
 };
 
 export default function SettingsPage() {
@@ -47,6 +49,7 @@ export default function SettingsPage() {
           accountNumber: data.accountNumber || defaultSettings.accountNumber,
           ifscCode: data.ifscCode || defaultSettings.ifscCode,
           termsAndConditions: data.termsAndConditions || defaultSettings.termsAndConditions,
+          startingQuoteNumber: data.startingQuoteNumber || defaultSettings.startingQuoteNumber,
         });
       })
       .catch(console.error)
@@ -141,6 +144,17 @@ export default function SettingsPage() {
                 onChange={e => setFormData({...formData, gstNumber: e.target.value})}
                 className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
               />
+            </div>
+            <div>
+              <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">Starting Quote Sequence Number</label>
+              <input
+                type="number"
+                min="1"
+                value={formData.startingQuoteNumber}
+                onChange={e => setFormData({...formData, startingQuoteNumber: parseInt(e.target.value, 10) || 1})}
+                className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
+              />
+              <p className="text-[12px] text-[#999] mt-1">If the current highest quote is lower, the next generated quote will start from this number.</p>
             </div>
           </div>
         </section>

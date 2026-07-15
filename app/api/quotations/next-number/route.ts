@@ -55,13 +55,19 @@ export async function GET() {
       }
     }
 
-    const nextSeq = maxSeq + 1;
-    const nextSeqStr = nextSeq.toString().padStart(2, '0');
-    const nextQuoteNumber = `${prefix}${nextSeqStr}`;
+    // Fetch starting quote number from Settings
+    const { data: settings } = await supabase.from('Settings').select('startingQuoteNumber').eq('id', 'default').maybeSingle();
+    const startingNum = settings?.startingQuoteNumber || 1;
 
-    return NextResponse.json({ quoteNumber: nextQuoteNumber });
+    // Use Math.max to ensure we jump to the startingNum if the maxSeq is lower
+    let nextSeq = Math.max(maxSeq + 1, startingNum);
+
+    // Format with leading zero if less than 10
+    const nextSeqFormatted = nextSeq.toString().padStart(2, '0');
+    
+    return NextResponse.json({ quoteNumber: `${prefix}${nextSeqFormatted}` });
   } catch (error) {
-    console.error('Failed to generate next quote number:', error);
+    console.error('Sequence generation error:', error);
     return NextResponse.json({ error: 'Failed to generate quote number' }, { status: 500 });
   }
 }

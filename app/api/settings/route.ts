@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   accountNumber: '145405004957',
   ifscCode: 'ICIC0001454',
   termsAndConditions: '',
+  startingQuoteNumber: 1,
 };
 
 export async function GET() {
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
       accountNumber: data.accountNumber || DEFAULT_SETTINGS.accountNumber,
       ifscCode: data.ifscCode || DEFAULT_SETTINGS.ifscCode,
       termsAndConditions: data.termsAndConditions || DEFAULT_SETTINGS.termsAndConditions,
+      startingQuoteNumber: data.startingQuoteNumber !== undefined ? parseInt(data.startingQuoteNumber, 10) : DEFAULT_SETTINGS.startingQuoteNumber,
     }, { onConflict: 'id' }).select().single();
     
     if (error) throw error;
