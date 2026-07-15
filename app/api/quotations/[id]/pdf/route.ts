@@ -70,8 +70,30 @@ export async function GET(
     const CONTENT_WIDTH = 545; // Exact width to fit columns nicely
     const TOP_MARGIN = A4_HEIGHT - 120; // Starts below the pre-printed header
     
-    let page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
-    let y = TOP_MARGIN;
+    // Global Totals Calculation
+    let globalSubtotal = 0;
+    for (const item of quote.items) {
+      const itemDiscount = item.discount || 0;
+      const netPrice = item.price * (1 - itemDiscount / 100);
+      globalSubtotal += netPrice * item.quantity;
+    }
+    const discountAmount = globalSubtotal * ((quote.discount || 0) / 100);
+    const taxableAmount = globalSubtotal - discountAmount;
+    const cgstAmt = taxableAmount * ((quote.cgst || 0) / 100);
+    const sgstAmt = taxableAmount * ((quote.sgst || 0) / 100);
+    const igstAmt = taxableAmount * ((quote.igst || 0) / 100);
+    const grandTotal = taxableAmount + cgstAmt + sgstAmt + igstAmt;
+
+    const chunks = [];
+    if (quote.items.length === 0) chunks.push([]);
+    for (let i = 0; i < quote.items.length; i += 12) {
+      chunks.push(quote.items.slice(i, i + 12));
+    }
+
+    for (let pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
+      const currentChunk = chunks[pageIndex];
+      let page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+      let y = TOP_MARGIN;
 
     const addBackground = () => {
       if (letterheadImage) {
@@ -180,21 +202,19 @@ export async function GET(
     // 6. Table Body (Fixed grid)
     const numRows = 12;
     const rowHeight = 18; // slightly smaller row height to fit everything nicely
-
-    let subtotal = 0;
     
     for (let i = 0; i < numRows; i++) {
-        const item = quote.items[i];
+        const item = currentChunk[i];
         let rowTexts = ["", "", "", "", "", "", "", ""];
         
         if (item) {
             const itemDiscount = item.discount || 0;
             const netPrice = item.price * (1 - itemDiscount / 100);
             const amount = netPrice * item.quantity;
-            subtotal += amount;
+            const itemIndex = pageIndex * 12 + i + 1;
 
             rowTexts = [
-                (i + 1).toString(),
+                itemIndex.toString(),
                 item.articleNumber || "",
                 item.name || "",
                 item.quantity.toString(),
@@ -250,12 +270,6 @@ export async function GET(
     page.drawText(`ACCOUNT NO-${settings?.accountNumber || '145405004957'}`, { x: bankPad, y: y - 54, size: 10, font: boldFont });
     page.drawText(`IFSC CODE-${settings?.ifscCode || 'ICIC0001454'}`, { x: bankPad, y: y - 74, size: 10, font: boldFont });
 
-    const discountAmount = subtotal * ((quote.discount || 0) / 100);
-    const taxableAmount = subtotal - discountAmount;
-    const cgstAmt = taxableAmount * ((quote.cgst || 0) / 100);
-    const sgstAmt = taxableAmount * ((quote.sgst || 0) / 100);
-    const igstAmt = taxableAmount * ((quote.igst || 0) / 100);
-    const grandTotal = taxableAmount + cgstAmt + sgstAmt + igstAmt;
 
     const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false) => {
         const f = isBold ? boldFont : font;
@@ -349,6 +363,7 @@ export async function GET(
     const fText2 = "SUBJECTED TO CH. SAMBHAJI NAGAR JURISDICTION";
     page.drawText(fText1, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText1, 8))/2, y, size: 8, font: font });
     page.drawText(fText2, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText2, 8))/2, y: y - 12, size: 8, font: font });
+    } // End of page loop
 
     const pdfBytes = await pdfDoc.save();
 
