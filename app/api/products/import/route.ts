@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import Papa from 'papaparse';
 import * as xlsx from 'xlsx';
 
@@ -159,41 +159,105 @@ function processWithHeaderIndex(
   return { items, skipped };
 }
 
+// Cache buster for pdf-parse swap
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    if (!file || file.size === 0) {
+      return NextResponse.json({ error: 'No file uploaded or file is empty' }, { status: 400 });
     }
 
     const buffer = await file.arrayBuffer();
     const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isPdf = file.name.endsWith('.pdf');
     let rows: any[][] = [];
+    let validItems: any[] = [];
+    let skipped = 0;
 
-    if (isExcel) {
-      const workbook = xlsx.read(buffer, { type: 'buffer' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      // Read all rows as raw arrays (no header assumption)
-      rows = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+    if (isPdf) {
+      const pdfParse = require('pdf-parse/lib/pdf-parse.js');
+      const pdfBuffer = Buffer.from(buffer);
+      
+      function render_page(pageData: any) {
+        let render_options = { normalizeWhitespace: false, disableCombineTextItems: false };
+        return pageData.getTextContent(render_options).then(function(textContent: any) {
+            let lastY, text = '';
+            for (let item of textContent.items) {
+                if (lastY == item.transform[5] || !lastY){
+                    text += ' ' + item.str;
+                } else{
+                    text += '\n' + item.str;
+                }    
+                lastY = item.transform[5];
+            }            
+            return text;
+        });
+      }
+      
+      const data = await pdfParse(pdfBuffer, { pagerender: render_page });
+      const lines = data.text.split('\n').map((l: string) => l.trim()).filter(Boolean);
+      
+      let foundHeader = false;
+      for (const line of lines) {
+        if (!foundHeader) {
+          const lower = line.toLowerCase();
+          if (lower.includes('item name') || (lower.includes('sr. no') && lower.includes('price'))) {
+            foundHeader = true;
+          }
+          continue;
+        }
+        
+        // Match format: 1 2345 lorem 1 ₹8,000
+        const match = line.match(/^(\d+)\s+(\S+)\s+(.+?)\s+(?:₹|Rs\.?)?\s*([\d,.]+)$/i);
+        if (match) {
+          const artNo = match[2];
+          const itemName = match[3];
+          const priceStr = match[4].replace(/,/g, '');
+          const price = parseFloat(priceStr);
+          
+          if (itemName && !isNaN(price) && price > 0) {
+            validItems.push({
+              name: itemName.trim(),
+              articleNumber: artNo.trim(),
+              sku: null,
+              description: null,
+              price: price
+            });
+          } else {
+            skipped++;
+          }
+        } else {
+          skipped++;
+        }
+      }
     } else {
-      const csvText = await file.text();
-      const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: true });
-      rows = parsed.data as any[][];
+      if (isExcel) {
+        const workbook = xlsx.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        rows = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
+      } else {
+        const csvText = await file.text();
+        const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+        rows = parsed.data as any[][];
+      }
+      
+      const processed = processRawRows(rows);
+      validItems = processed.items;
+      skipped = processed.skipped;
     }
 
     // Since the price list changes WRT years, we replace the entire price list
-    await prisma.product.deleteMany({});
-
-    const { items: validItems, skipped } = processRawRows(rows);
+    await supabase.from('Product').delete().not('id', 'is', null);
 
     // Insert in batches of 1000
     const BATCH_SIZE = 1000;
     for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
       const batch = validItems.slice(i, i + BATCH_SIZE);
-      await prisma.product.createMany({ data: batch });
+      const { error } = await supabase.from('Product').insert(batch);
+      if (error) throw error;
     }
 
     return NextResponse.json({

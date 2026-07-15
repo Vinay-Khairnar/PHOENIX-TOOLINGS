@@ -7,19 +7,13 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
 
-interface Customer { id: string; name: string; email: string | null; phone: string | null; address: string | null; }
-interface Product { id: string; name: string; sku: string | null; articleNumber: string | null; price: number; discount: number; }
+interface Product { id: string; name: string; articleNumber: string | null; price: number; }
 
 export default function Home() {
   const router = useRouter();
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const customerInputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   
   const { 
     customerName, setCustomerName,
@@ -36,41 +30,9 @@ export default function Home() {
     igst, setIgst,
     items, addItem, updateItemQuantity, updateItemDiscount, removeItem, 
     discount, setDiscount,
-    fillCustomer,
     reset 
   } = useQuoteBuilder();
 
-  useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setCustomers(data);
-      })
-      .catch(console.error);
-  }, []);
-
-  // Filter customers for autocomplete
-  useEffect(() => {
-    if (customerName.length < 1) {
-      setFilteredCustomers([]);
-      return;
-    }
-    const filtered = customers.filter(c =>
-      c.name.toLowerCase().includes(customerName.toLowerCase())
-    );
-    setFilteredCustomers(filtered);
-  }, [customerName, customers]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowCustomerDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -89,6 +51,20 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Auto-generate quote number on mount if empty
+  useEffect(() => {
+    if (!quoteNumber) {
+      fetch('/api/quotations/next-number')
+        .then(res => res.json())
+        .then(data => {
+          if (data.quoteNumber) {
+            setQuoteNumber(data.quoteNumber);
+          }
+        })
+        .catch(console.error);
+    }
+  }, []);
+
   const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity * (1 - (item.discount || 0) / 100)), 0);
   const discountAmount = subtotal * (discount / 100);
   const taxableAmount = subtotal - discountAmount;
@@ -97,10 +73,6 @@ export default function Home() {
   const igstAmount = taxableAmount * (igst / 100);
   const total = taxableAmount + cgstAmount + sgstAmount + igstAmount;
 
-  const handleSelectCustomer = (customer: Customer) => {
-    fillCustomer(customer);
-    setShowCustomerDropdown(false);
-  };
 
   const handleGenerate = async () => {
     if (!customerName.trim()) {
@@ -170,40 +142,15 @@ export default function Home() {
             Customer Details
           </h2>
           <div className="flex flex-col gap-4">
-            {/* Customer Name with Autocomplete */}
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative">
               <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">Customer Name *</label>
               <input 
-                ref={customerInputRef}
                 type="text"
                 placeholder="Type customer name..."
                 className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
                 value={customerName}
-                onChange={(e) => {
-                  setCustomerName(e.target.value);
-                  setShowCustomerDropdown(true);
-                }}
-                onFocus={() => setShowCustomerDropdown(true)}
+                onChange={(e) => setCustomerName(e.target.value)}
               />
-              {showCustomerDropdown && filteredCustomers.length > 0 && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-[#e0e0e0] rounded-[11px] shadow-lg max-h-[200px] overflow-y-auto">
-                  {filteredCustomers.map(c => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="w-full text-left px-4 py-3 hover:bg-[#f5f5f7] border-b border-[#f0f0f0] last:border-b-0 transition-colors"
-                      onClick={() => handleSelectCustomer(c)}
-                    >
-                      <div className="font-medium text-[14px]">{c.name}</div>
-                      {(c.email || c.phone) && (
-                        <div className="text-[12px] text-[#7a7a7a]">
-                          {[c.email, c.phone].filter(Boolean).join(' • ')}
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -343,7 +290,7 @@ export default function Home() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7a7a] w-5 h-5" />
             <input 
               type="text" 
-              placeholder="Search by name, SKU, or article number..." 
+              placeholder="Search by description or part number..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] py-3 pl-12 pr-4 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
@@ -358,8 +305,7 @@ export default function Home() {
                     <div className="font-semibold text-[15px] tracking-tight">{product.name}</div>
                     <div className="text-[13px] text-[#7a7a7a]">
                       {[
-                        product.articleNumber ? `Art: ${product.articleNumber}` : null,
-                        product.sku ? `SKU: ${product.sku}` : null,
+                        product.articleNumber ? `Part No: ${product.articleNumber}` : null,
                         formatCurrency(product.price)
                       ].filter(Boolean).join(' | ')}
                     </div>
@@ -397,7 +343,7 @@ export default function Home() {
                       <div className="font-semibold text-[14px]">{item.name}</div>
                       <div className="text-[12px] text-[#7a7a7a]">
                         {[
-                          item.articleNumber ? `Art: ${item.articleNumber}` : null,
+                          item.articleNumber ? `Part No: ${item.articleNumber}` : null,
                           formatCurrency(item.price)
                         ].filter(Boolean).join(' | ')}
                       </div>

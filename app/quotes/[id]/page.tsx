@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Download, Printer, Loader2 } from 'lucide-react';
 import Link from 'next/link';
@@ -11,14 +11,23 @@ export default async function QuotePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const quote = await prisma.quote.findUnique({
-    where: { id },
-    include: { customer: true, items: true },
-  });
+  const { data: quoteRaw } = await supabase
+    .from('Quote')
+    .select('*, Customer(*), items:QuoteItem(*)')
+    .eq('id', id)
+    .single();
 
-  if (!quote) return notFound();
+  if (!quoteRaw) return notFound();
 
-  const subtotal = quote.items.reduce((sum, item) => {
+  const quote = {
+    ...quoteRaw,
+    customerName: quoteRaw.Customer?.name,
+    customerEmail: quoteRaw.Customer?.email,
+    customerPhone: quoteRaw.Customer?.phone,
+    customerAddress: quoteRaw.Customer?.address,
+  };
+
+  const subtotal = quote.items.reduce((sum: number, item: any) => {
     return sum + (item.price * item.quantity * (1 - (item.discount || 0) / 100));
   }, 0);
   
@@ -67,8 +76,8 @@ export default async function QuotePage({
 
         <div className="mb-10">
           <h3 className="font-semibold text-[#7a7a7a] text-[14px] uppercase mb-2">Customer</h3>
-          <p className="font-semibold text-[17px]">{quote.customer.name}</p>
-          {quote.customer.email && <p className="text-[#7a7a7a] text-[14px]">{quote.customer.email}</p>}
+          <p className="font-semibold text-[17px]">{quote.customerName}</p>
+          {quote.customerEmail && <p className="text-[#7a7a7a] text-[14px]">{quote.customerEmail}</p>}
         </div>
 
         <table className="w-full text-left mb-8">
@@ -82,11 +91,11 @@ export default async function QuotePage({
             </tr>
           </thead>
           <tbody>
-            {quote.items.map(item => (
+            {quote.items.map((item: any) => (
               <tr key={item.id} className="border-b border-[#f0f0f0]">
                 <td className="py-4 text-[14px]">
                   <div className="font-medium text-slate-900">{item.name}</div>
-                  {item.articleNumber && <div className="text-[12px] text-slate-500">Art: {item.articleNumber}</div>}
+                  {item.articleNumber && <div className="text-[12px] text-slate-500">Part No: {item.articleNumber}</div>}
                 </td>
                 <td className="py-4 px-6 text-[14px] text-right font-medium">{formatCurrency(item.price)}</td>
                 <td className="py-4 px-6 text-[14px] text-center">{item.quantity}</td>

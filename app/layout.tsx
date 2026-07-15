@@ -19,8 +19,12 @@ export const metadata: Metadata = {
 };
 
 import { Toaster } from 'react-hot-toast';
+import { supabase } from '@/lib/supabase';
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default async function RootLayout({children}: {children: React.ReactNode}) {
+  const { data: settings } = await supabase.from('Settings').select('companyName').maybeSingle();
+  const titleText = settings?.companyName ? `${settings.companyName} quotation` : 'QuoteMate';
+
   return (
     <html lang="en" className={`${inter.variable}`}>
       <body className="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col" suppressHydrationWarning>
@@ -30,7 +34,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex h-16 items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-xl tracking-tight text-indigo-600 cursor-pointer">
-                <Link href="/">QuoteMate</Link>
+                <Link href="/">{titleText}</Link>
               </div>
               <nav className="flex items-center gap-6 text-sm font-medium text-slate-600">
                 <Link href="/" className="hover:text-indigo-600 transition-colors">Home</Link>

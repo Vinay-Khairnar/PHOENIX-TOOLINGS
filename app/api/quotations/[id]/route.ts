@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import { NextResponse } from 'next/server';
 
 export async function DELETE(
@@ -7,9 +7,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await prisma.quote.delete({
-      where: { id },
-    });
+    // QuoteItem relies on ON DELETE CASCADE, so we just delete the Quote
+    const { error } = await supabase.from('Quote').delete().eq('id', id);
+    if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete quote:', error);

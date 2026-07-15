@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -9,33 +9,26 @@ export async function GET(request: Request) {
   const skip = (page - 1) * limit;
 
   try {
-    const whereClause = search
-      ? {
-          OR: [
-            { name: { contains: search } },
-            { sku: { contains: search } },
-            { articleNumber: { contains: search } },
-          ],
-        }
-      : undefined;
+    let query = supabase.from('Product').select('*', { count: 'exact' });
+    
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,articleNumber.ilike.%${search}%`);
+    }
 
-    const [products, totalCount] = await Promise.all([
-      prisma.product.findMany({
-        where: whereClause,
-        take: limit,
-        skip,
-        orderBy: { name: 'asc' },
-      }),
-      prisma.product.count({ where: whereClause })
-    ]);
+    const { data: products, count: totalCount, error } = await query
+      .order('name', { ascending: true })
+      .range(skip, skip + limit - 1);
+
+    if (error) throw error;
     
     return NextResponse.json({
       products,
-      totalPages: Math.ceil(totalCount / limit),
+      totalPages: Math.ceil((totalCount || 0) / limit),
       currentPage: page,
-      totalCount
+      totalCount: totalCount || 0
     });
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
@@ -43,17 +36,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    const product = await prisma.product.create({
-      data: {
-        name: data.name,
-        sku: data.sku || null,
-        articleNumber: data.articleNumber || null,
-        price: parseFloat(data.price),
-        description: data.description || null,
-      },
-    });
+    const { data: product, error } = await supabase.from('Product').insert({
+      name: data.name,
+      sku: data.sku || null,
+      articleNumber: data.articleNumber || null,
+      price: parseFloat(data.price),
+      description: data.description || null,
+    }).select().single();
+    
+    if (error) throw error;
     return NextResponse.json(product);
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }

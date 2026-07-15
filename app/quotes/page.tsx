@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { FileText, ArrowRight, Plus } from 'lucide-react';
 import { DeleteQuoteButton } from './DeleteQuoteButton';
@@ -7,10 +7,16 @@ import { formatCurrency } from '@/lib/format';
 export const dynamic = 'force-dynamic';
 
 export default async function QuotesPage() {
-  const quotes = await prisma.quote.findMany({
-    include: { customer: true, items: true },
-    orderBy: { createdAt: 'desc' },
-  });
+  const { data } = await supabase
+    .from('Quote')
+    .select('*, Customer(*), items:QuoteItem(*)')
+    .order('createdAt', { ascending: false });
+
+  const quotesRaw = data || [];
+  const quotes = quotesRaw.map(q => ({
+    ...q,
+    customerName: q.Customer?.name,
+  }));
 
   return (
     <div className="flex-1 w-full max-w-5xl mx-auto flex flex-col gap-8">
@@ -42,7 +48,7 @@ export default async function QuotesPage() {
             </Link>
           </div>
         ) : (
-          quotes.map(quote => (
+          quotes.map((quote: any) => (
             <div key={quote.id} className="relative group">
               <Link 
                 href={`/quotes/${quote.id}`}
@@ -57,7 +63,7 @@ export default async function QuotesPage() {
                       {new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-500 font-medium">{quote.customer.name}</p>
+                  <p className="text-sm text-slate-500 font-medium">{quote.customerName}</p>
                 </div>
                 
                 <div className="flex items-center justify-between sm:justify-end gap-8 mt-4 sm:mt-0 w-full sm:w-auto">

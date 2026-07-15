@@ -1,12 +1,17 @@
 import Link from 'next/link';
 import { Plus, PackageSearch, FileText } from 'lucide-react';
 
-export default function Home() {
+import { supabase } from '@/lib/supabase';
+
+export default async function Home() {
+  const { data: settings } = await supabase.from('Settings').select('companyName').maybeSingle();
+  const titleText = settings?.companyName ? `${settings.companyName} quotation` : 'QuoteMate';
+
   return (
     <div className="flex-1 w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col items-center justify-center min-h-[calc(100vh-44px)] pb-32">
       <div className="text-center mb-24">
         <h1 className="text-[56px] font-semibold tracking-[-0.28px] leading-[1.07] mb-4">
-          QuoteMate
+          {titleText}
         </h1>
         <p className="text-[28px] font-normal tracking-[0.196px] text-[#7a7a7a]">
           Professional quotations in seconds.
