@@ -114,18 +114,18 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="flex-1 w-full max-w-[1000px] mx-auto p-4 md:p-8">
+    <div className="animate-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-8">
         <div>
-          <h1 className="text-[34px] font-semibold tracking-tight">Products</h1>
-          <p className="text-[#7a7a7a]">Manage your product catalog</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Products</h1>
+          <p className="text-slate-500 mt-1">Manage your product catalog</p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {products.length > 0 && (
             <button 
               onClick={handleDeleteAll}
               disabled={isDeletingAll}
-              className="bg-red-50 text-red-600 border border-red-200 rounded-[11px] py-2 px-4 font-medium text-[14px] hover:bg-red-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 flex-1 sm:flex-none"
+              className="flex items-center gap-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm disabled:opacity-50 flex-1 sm:flex-none justify-center"
             >
               {isDeletingAll ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</>
@@ -134,7 +134,7 @@ export default function ProductsPage() {
               )}
             </button>
           )}
-          <label className={`bg-[#0066cc] text-white rounded-[11px] py-2 px-4 text-[14px] font-semibold hover:bg-[#0071e3] transition cursor-pointer flex items-center justify-center gap-2 flex-1 sm:flex-none ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+          <label className={`flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm shadow-indigo-200 cursor-pointer flex-1 sm:flex-none ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
             {isUploading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Importing...</>
             ) : (
@@ -145,77 +145,79 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-200 bg-white">
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-[#0066cc] transition-colors" />
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="relative max-w-md">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Search products by description or part no..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-50/50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-4 text-[15px] outline-none focus:bg-white focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             />
           </div>
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm text-xs uppercase tracking-wider font-semibold text-slate-500 divide-x divide-slate-200">
-                <th className="py-4 px-6 w-20 whitespace-nowrap">Sr. No.</th>
-                <th className="py-4 px-6 w-1/4">Part No.</th>
-                <th className="py-4 px-6 w-2/4">Description</th>
-                <th className="py-4 px-6 w-1/6 text-right">Price</th>
-                <th className="py-4 px-6 w-1/12 text-right">Actions</th>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50/80 text-slate-500 font-medium">
+              <tr>
+                <th className="px-6 py-4 w-20 whitespace-nowrap">Sr. No.</th>
+                <th className="px-6 py-4 w-1/4">Part No.</th>
+                <th className="px-6 py-4 w-2/4">Description</th>
+                <th className="px-6 py-4 w-1/6 text-right">Price</th>
+                <th className="px-6 py-4 w-1/12 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-24 text-center">
-                    <Loader2 className="w-8 h-8 mx-auto animate-spin text-[#0066cc] mb-4" />
-                    <h3 className="text-slate-900 font-medium text-[16px] mb-1">Loading products...</h3>
-                    <p className="text-slate-500 text-[14px]">Please wait while we fetch your catalog.</p>
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <Loader2 className="w-8 h-8 mx-auto animate-spin text-indigo-600 mb-4" />
+                    <h3 className="text-slate-900 font-medium text-base mb-1">Loading products...</h3>
+                    <p className="text-slate-500 text-sm">Please wait while we fetch your catalog.</p>
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-24 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
                       <PackageSearch className="w-8 h-8 text-slate-400" />
                     </div>
-                    <h3 className="text-slate-900 font-medium text-[16px] mb-1">No products found</h3>
-                    <p className="text-slate-500 text-[14px]">Try adjusting your search query or import some products.</p>
+                    <h3 className="text-slate-900 font-medium text-base mb-1">No products found</h3>
+                    <p className="text-slate-500 text-sm">Try adjusting your search query or import some products.</p>
                   </td>
                 </tr>
               ) : (
                 products.map((product, index) => (
-                  <tr key={product.id} className="group hover:bg-blue-50/30 transition-colors duration-200 divide-x divide-slate-100">
-                    <td className="py-4 px-6 text-[13px] text-slate-400 font-medium tabular-nums text-center">
+                  <tr key={product.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-6 py-4 text-slate-500 font-medium tabular-nums text-center">
                       {(page - 1) * 50 + index + 1}
                     </td>
-                    <td className="py-4 px-6 text-[14px]">
+                    <td className="px-6 py-4">
                       {product.articleNumber ? (
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-white group-hover:border-slate-300 transition-colors">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-white transition-colors">
                           {product.articleNumber}
                         </span>
                       ) : '-'}
                     </td>
-                    <td className="py-4 px-6 text-[14px] text-slate-900 font-medium">
+                    <td className="px-6 py-4 font-medium text-slate-900">
                       {product.name}
                     </td>
-                    <td className="py-4 px-6 text-[14px] text-right text-slate-900 font-semibold tabular-nums">
+                    <td className="px-6 py-4 text-right text-slate-900 font-medium tabular-nums">
                       {formatCurrency(product.price)}
                     </td>
-                    <td className="py-4 px-6 text-right">
-                      <button 
-                        onClick={() => handleDelete(product.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        title="Delete product"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => handleDelete(product.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete product"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -225,22 +227,22 @@ export default function ProductsPage() {
         </div>
 
         {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50/50">
-            <div className="text-[13px] text-slate-500 font-medium">
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="text-sm text-slate-500 font-medium">
               Showing <span className="text-slate-900 font-semibold">{(page - 1) * 50 + 1}</span> to <span className="text-slate-900 font-semibold">{Math.min(page * 50, totalCount)}</span> of <span className="text-slate-900 font-semibold">{totalCount}</span> results
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm"
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm"
               >
                 Previous
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm"
+                className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50 disabled:pointer-events-none transition-all shadow-sm"
               >
                 Next
               </button>

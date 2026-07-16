@@ -133,82 +133,82 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="flex-1 w-full max-w-[1200px] mx-auto p-4 md:p-8">
+    <div className="animate-in">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-[28px] sm:text-[32px] font-semibold tracking-tight text-[#111]">Customers</h1>
-          <p className="text-[#7a7a7a] mt-1">Manage your customer database</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Customers</h1>
+          <p className="text-slate-500 mt-1">Manage your customer database</p>
         </div>
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="bg-[#0066cc] text-white rounded-full py-2.5 px-6 font-semibold text-[14px] hover:bg-[#0071e3] transition-all flex items-center gap-2 shadow-sm"
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm shadow-indigo-200"
         >
           <Plus className="w-4 h-4" />
           New Customer
         </button>
       </div>
 
-      <div className="bg-white border border-[#e0e0e0] rounded-[18px] shadow-[0_5px_30px_rgba(0,0,0,0.05)] overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-[#e0e0e0] bg-[#fafafc]">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
           <div className="relative max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7a7a7a] w-4 h-4" />
+            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Search customers..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-[#e0e0e0] rounded-full py-2.5 pl-10 pr-4 text-[14px] outline-none focus:ring-2 focus:ring-[#0066cc]/20 focus:border-[#0066cc] transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#e0e0e0] bg-white">
-                <th className="py-4 px-6 text-[13px] font-semibold text-[#7a7a7a] whitespace-nowrap">Name</th>
-                <th className="py-4 px-6 text-[13px] font-semibold text-[#7a7a7a] whitespace-nowrap">Email</th>
-                <th className="py-4 px-6 text-[13px] font-semibold text-[#7a7a7a] whitespace-nowrap">Phone</th>
-                <th className="py-4 px-6 text-[13px] font-semibold text-[#7a7a7a] whitespace-nowrap">Added On</th>
-                <th className="py-4 px-6 text-[13px] font-semibold text-[#7a7a7a] text-right whitespace-nowrap">Actions</th>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50/80 text-slate-500 font-medium">
+              <tr>
+                <th className="px-6 py-4">Name</th>
+                <th className="px-6 py-4">Email</th>
+                <th className="px-6 py-4">Phone</th>
+                <th className="px-6 py-4">Added On</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f0f0f0]">
+            <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#7a7a7a]">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
                     Loading customers...
                   </td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#7a7a7a]">
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
                     No customers found.
                   </td>
                 </tr>
               ) : (
                 customers.map(customer => (
-                  <tr key={customer.id} className="hover:bg-[#fafafc] transition-colors">
-                    <td className="py-4 px-6">
+                  <tr key={customer.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-6 py-4 font-medium text-slate-900">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#f0f5ff] text-[#0066cc] flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                           <User className="w-4 h-4" />
                         </div>
-                        <span className="font-medium text-[#111]">{customer.name}</span>
+                        {customer.name}
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-[#555] text-[14px]">{customer.email || '-'}</td>
-                    <td className="py-4 px-6 text-[#555] text-[14px]">{customer.phone || '-'}</td>
-                    <td className="py-4 px-6 text-[#7a7a7a] text-[14px]">
+                    <td className="px-6 py-4 text-slate-600">{customer.email || '-'}</td>
+                    <td className="px-6 py-4 text-slate-600">{customer.phone || '-'}</td>
+                    <td className="px-6 py-4 text-slate-500">
                       {new Date(customer.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
                         <button
                           onClick={() => openEditModal(customer)}
                           disabled={isDeleting === customer.id}
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-[#7a7a7a] hover:text-[#0066cc] hover:bg-[#f0f5ff] transition-all disabled:opacity-50"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
                           title="Edit Customer"
                         >
                           <Pencil className="w-4 h-4" />
@@ -216,7 +216,7 @@ export default function CustomersPage() {
                         <button
                           onClick={() => handleDelete(customer.id)}
                           disabled={isDeleting === customer.id}
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-[#7a7a7a] hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                           title="Delete Customer"
                         >
                           {isDeleting === customer.id ? (
