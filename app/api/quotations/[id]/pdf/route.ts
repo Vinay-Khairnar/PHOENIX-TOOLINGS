@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { PDFDocument, rgb, StandardFonts, PDFImage } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFImage, PageSizes } from 'pdf-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -51,24 +51,53 @@ export async function GET(
     
     let letterheadBytes;
     try {
-      const letterheadPath = path.join(process.cwd(), 'public', 'letterhead.jpg');
-      letterheadBytes = fs.readFileSync(letterheadPath);
-    } catch (e) {
-      console.error('Could not load letterhead.jpg', e);
-    }
+      letterheadBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'letterHead.png'));
+    } catch (e) {}
 
     let letterheadImage: any;
     if (letterheadBytes) {
-      letterheadImage = await pdfDoc.embedJpg(letterheadBytes);
+      letterheadImage = await pdfDoc.embedPng(letterheadBytes);
     }
 
-    const A4_WIDTH = 595.28;
-    const A4_HEIGHT = 841.89;
+    let headerLogoBytes;
+    try {
+      headerLogoBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'headerLogo.png'));
+    } catch (e) {}
+
+    let headerLogoImage: any;
+    if (headerLogoBytes) {
+      headerLogoImage = await pdfDoc.embedPng(headerLogoBytes);
+    }
+
+    // Footer text is drawn dynamically, no image needed
+    let partnersBytes;
+    try {
+      const partnersPath = path.join(process.cwd(), 'public', 'partners.jpg');
+      partnersBytes = fs.readFileSync(partnersPath);
+    } catch (e) {
+      try {
+        const partnersPathPng = path.join(process.cwd(), 'public', 'partners.png');
+        partnersBytes = fs.readFileSync(partnersPathPng);
+      } catch (e2) {}
+    }
+
+    let partnersImage: any;
+    if (partnersBytes) {
+      try {
+        partnersImage = await pdfDoc.embedJpg(partnersBytes);
+      } catch (e) {
+        try {
+          partnersImage = await pdfDoc.embedPng(partnersBytes);
+        } catch (e2) {}
+      }
+    }
+
+    const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
     
-    // Adjusted margins to match the sample PDF (leaving room for right sidebar)
-    const MARGIN_LEFT = 15;
-    const CONTENT_WIDTH = 545; // Exact width to fit columns nicely
-    const TOP_MARGIN = A4_HEIGHT - 120; // Starts below the pre-printed header
+    // Standard margins for decoupled header and footer images
+    const CONTENT_WIDTH = 520; // Reduced width to avoid right red banner
+    const MARGIN_LEFT = 20;
+    const TOP_MARGIN = A4_HEIGHT - 110; // Moved up to reduce whitespace
     
     // Global Totals Calculation
     let globalSubtotal = 0;
@@ -86,8 +115,9 @@ export async function GET(
 
     const chunks = [];
     if (quote.items.length === 0) chunks.push([]);
-    for (let i = 0; i < quote.items.length; i += 12) {
-      chunks.push(quote.items.slice(i, i + 12));
+    const ITEMS_PER_PAGE = 10;
+    for (let i = 0; i < quote.items.length; i += ITEMS_PER_PAGE) {
+      chunks.push(quote.items.slice(i, i + ITEMS_PER_PAGE));
     }
 
     for (let pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
@@ -104,10 +134,54 @@ export async function GET(
           height: A4_HEIGHT,
         });
       }
+      if (headerLogoImage) {
+        const dims = headerLogoImage.scaleToFit(200, 80);
+        page.drawImage(headerLogoImage, {
+          x: MARGIN_LEFT + CONTENT_WIDTH - dims.width, // Align with right side of the table
+          y: A4_HEIGHT - dims.height - 15,
+          width: dims.width,
+          height: dims.height,
+        });
+      }
+      // Draw dynamic footer text instead of an image
+      const footerY = 40;
+      
+      const gstColor = rgb(0.5, 0.5, 0.5);
+      const redColor = rgb(0.83, 0.12, 0.25);
+      
+      // Left side: GST No.
+      page.drawText("GST No. : 27AFWPG3321F1ZH", { x: 40, y: footerY - 6, size: 9, font: boldFont, color: gstColor });
+      
+      // Center side: Address
+      const centerLine1 = "A-51, MIDC Waluj, Aurangabad-431 136.";
+      const centerLine2 = "(Maharashtra), India.";
+      const centerLine3 = "Mfg. of ISO & Tailor Made Indexable Tool Holders";
+      
+      const centerX = 190;
+      page.drawText(centerLine1, { x: centerX, y: footerY + 12, size: 9, font: font, color: redColor });
+      page.drawText(centerLine2, { x: centerX, y: footerY, size: 9, font: font, color: redColor });
+      page.drawText(centerLine3, { x: centerX, y: footerY - 12, size: 8, font: font, color: gstColor });
+      
+      // Vertical line divider
+      const lineX = 390;
+      page.drawLine({ start: { x: lineX, y: footerY + 15 }, end: { x: lineX, y: footerY - 25 }, thickness: 0.5, color: gstColor });
+      
+      // Right side: Contact
+      const rightX = 400;
+      page.drawText("M", { x: rightX, y: footerY + 12, size: 9, font: boldFont, color: redColor });
+      page.drawText(" : +91 9890448625,", { x: rightX + 10, y: footerY + 12, size: 8, font: font, color: gstColor });
+      
+      page.drawText("E", { x: rightX, y: footerY, size: 9, font: boldFont, color: redColor });
+      page.drawText(" : gbs@phoenixtoolings.com", { x: rightX + 10, y: footerY, size: 8, font: font, color: gstColor });
+      
+      page.drawText("E", { x: rightX, y: footerY - 12, size: 9, font: boldFont, color: redColor });
+      page.drawText(" : mayur@phoenixtoolings.com", { x: rightX + 10, y: footerY - 12, size: 8, font: font, color: gstColor });
+      
+      page.drawText("AN ISO 9001:2015 CERTIFIED COMPANY", { x: rightX, y: footerY - 24, size: 8, font: font, color: gstColor });
     };
 
     addBackground();
-
+    
     const drawGridCell = (text: string, x: number, yPos: number, w: number, h: number, f: any, size: number, align: 'left' | 'center' | 'right' = 'left', drawBox = true) => {
       if (drawBox) {
         page.drawRectangle({ x, y: yPos - h, width: w, height: h, borderColor: rgb(0,0,0), borderWidth: 1 });
@@ -184,9 +258,9 @@ export async function GET(
     y -= row4Height;
 
     // 5. Table Header
-    const colWidths = [30, 65, 160, 35, 65, 65, 55, 70];
-    const headers = ["SR NO.", "PART NO.", "DESCRIPTION", "QTY", "UNIT / PRICE", "NET PRICE", "DICSOUNT", "AMOUNT"];
-    const headerHeight = 20;
+    const headerHeight = 18;
+    const headers = ["SR NO.", "PART NO.", "DESCRIPTION", "QTY", "UNIT / PRICE", "NET PRICE", "DISCOUNT", "AMOUNT"];
+    const colWidths = [30, 80, 150, 30, 60, 60, 50, 60]; 
     let curX = MARGIN_LEFT;
     for (let i = 0; i < headers.length; i++) {
         drawGridCell(headers[i], curX, y, colWidths[i], headerHeight, boldFont, 8, 'center');
@@ -195,7 +269,7 @@ export async function GET(
     y -= headerHeight;
 
     // 6. Table Body (Fixed grid)
-    const numRows = 12;
+    const numRows = ITEMS_PER_PAGE;
     const rowHeight = 18; // slightly smaller row height to fit everything nicely
     const tableBodyHeight = numRows * rowHeight;
 
@@ -379,6 +453,28 @@ export async function GET(
     const fText2 = "SUBJECTED TO CH. SAMBHAJI NAGAR JURISDICTION";
     page.drawText(fText1, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText1, 8))/2, y, size: 8, font: font });
     page.drawText(fText2, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText2, 8))/2, y: y - 12, size: 8, font: font });
+
+    // 10. Authorized Channel Partners
+    y -= 35;
+    
+    const titleStr = "AUTHORIZED CHANNEL PARTNER";
+    page.drawText(titleStr, { x: MARGIN_LEFT, y, size: 9, font: boldFont });
+    page.drawLine({ start: { x: MARGIN_LEFT, y: y - 2 }, end: { x: MARGIN_LEFT + boldFont.widthOfTextAtSize(titleStr, 9), y: y - 2 }, thickness: 1, color: rgb(0,0,0) });
+    y -= 10;
+
+    if (partnersImage) {
+        const pDims = partnersImage.scaleToFit(CONTENT_WIDTH, 35);
+        page.drawImage(partnersImage, {
+            x: MARGIN_LEFT,
+            y: y - pDims.height,
+            width: pDims.width,
+            height: pDims.height,
+        });
+    } else {
+        const partnersText = "ISCAR   |   CTC PRECISION   |   REGO-FIX   |   HNTI OIL   |   ADDISON";
+        page.drawText(partnersText, { x: MARGIN_LEFT, y: y - 10, size: 10, font: boldFont });
+    }
+
     } // End of page loop
 
     const pdfBytes = await pdfDoc.save();
