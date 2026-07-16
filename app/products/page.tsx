@@ -115,17 +115,17 @@ export default function ProductsPage() {
 
   return (
     <div className="flex-1 w-full max-w-[1000px] mx-auto p-4 md:p-8">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-8">
         <div>
           <h1 className="text-[34px] font-semibold tracking-tight">Products</h1>
           <p className="text-[#7a7a7a]">Manage your product catalog</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {products.length > 0 && (
             <button 
               onClick={handleDeleteAll}
               disabled={isDeletingAll}
-              className="bg-red-50 text-red-600 border border-red-200 rounded-[11px] py-2 px-4 font-medium text-[14px] hover:bg-red-100 transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="bg-red-50 text-red-600 border border-red-200 rounded-[11px] py-2 px-4 font-medium text-[14px] hover:bg-red-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 flex-1 sm:flex-none"
             >
               {isDeletingAll ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</>
@@ -134,7 +134,7 @@ export default function ProductsPage() {
               )}
             </button>
           )}
-          <label className={`bg-[#0066cc] text-white rounded-[11px] py-2 px-4 text-[14px] font-semibold hover:bg-[#0071e3] transition cursor-pointer flex items-center gap-2 ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+          <label className={`bg-[#0066cc] text-white rounded-[11px] py-2 px-4 text-[14px] font-semibold hover:bg-[#0071e3] transition cursor-pointer flex items-center justify-center gap-2 flex-1 sm:flex-none ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
             {isUploading ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Importing...</>
             ) : (
@@ -159,68 +159,70 @@ export default function ProductsPage() {
           </div>
         </div>
         
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm text-xs uppercase tracking-wider font-semibold text-slate-500 divide-x divide-slate-200">
-              <th className="py-4 px-6 w-20 whitespace-nowrap">Sr. No.</th>
-              <th className="py-4 px-6 w-1/4">Part No.</th>
-              <th className="py-4 px-6 w-2/4">Description</th>
-              <th className="py-4 px-6 w-1/6 text-right">Price</th>
-              <th className="py-4 px-6 w-1/12 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading ? (
-              <tr>
-                <td colSpan={5} className="py-24 text-center">
-                  <Loader2 className="w-8 h-8 mx-auto animate-spin text-[#0066cc] mb-4" />
-                  <h3 className="text-slate-900 font-medium text-[16px] mb-1">Loading products...</h3>
-                  <p className="text-slate-500 text-[14px]">Please wait while we fetch your catalog.</p>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80 backdrop-blur-sm text-xs uppercase tracking-wider font-semibold text-slate-500 divide-x divide-slate-200">
+                <th className="py-4 px-6 w-20 whitespace-nowrap">Sr. No.</th>
+                <th className="py-4 px-6 w-1/4">Part No.</th>
+                <th className="py-4 px-6 w-2/4">Description</th>
+                <th className="py-4 px-6 w-1/6 text-right">Price</th>
+                <th className="py-4 px-6 w-1/12 text-right">Actions</th>
               </tr>
-            ) : products.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-24 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
-                    <PackageSearch className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <h3 className="text-slate-900 font-medium text-[16px] mb-1">No products found</h3>
-                  <p className="text-slate-500 text-[14px]">Try adjusting your search query or import some products.</p>
-                </td>
-              </tr>
-            ) : (
-              products.map((product, index) => (
-                <tr key={product.id} className="group hover:bg-blue-50/30 transition-colors duration-200 divide-x divide-slate-100">
-                  <td className="py-4 px-6 text-[13px] text-slate-400 font-medium tabular-nums text-center">
-                    {(page - 1) * 50 + index + 1}
-                  </td>
-                  <td className="py-4 px-6 text-[14px]">
-                    {product.articleNumber ? (
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-white group-hover:border-slate-300 transition-colors">
-                        {product.articleNumber}
-                      </span>
-                    ) : '-'}
-                  </td>
-                  <td className="py-4 px-6 text-[14px] text-slate-900 font-medium">
-                    {product.name}
-                  </td>
-                  <td className="py-4 px-6 text-[14px] text-right text-slate-900 font-semibold tabular-nums">
-                    {formatCurrency(product.price)}
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <button 
-                      onClick={() => handleDelete(product.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                      title="Delete product"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="py-24 text-center">
+                    <Loader2 className="w-8 h-8 mx-auto animate-spin text-[#0066cc] mb-4" />
+                    <h3 className="text-slate-900 font-medium text-[16px] mb-1">Loading products...</h3>
+                    <p className="text-slate-500 text-[14px]">Please wait while we fetch your catalog.</p>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-24 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
+                      <PackageSearch className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h3 className="text-slate-900 font-medium text-[16px] mb-1">No products found</h3>
+                    <p className="text-slate-500 text-[14px]">Try adjusting your search query or import some products.</p>
+                  </td>
+                </tr>
+              ) : (
+                products.map((product, index) => (
+                  <tr key={product.id} className="group hover:bg-blue-50/30 transition-colors duration-200 divide-x divide-slate-100">
+                    <td className="py-4 px-6 text-[13px] text-slate-400 font-medium tabular-nums text-center">
+                      {(page - 1) * 50 + index + 1}
+                    </td>
+                    <td className="py-4 px-6 text-[14px]">
+                      {product.articleNumber ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-white group-hover:border-slate-300 transition-colors">
+                          {product.articleNumber}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="py-4 px-6 text-[14px] text-slate-900 font-medium">
+                      {product.name}
+                    </td>
+                    <td className="py-4 px-6 text-[14px] text-right text-slate-900 font-semibold tabular-nums">
+                      {formatCurrency(product.price)}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <button 
+                        onClick={() => handleDelete(product.id)}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete product"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {totalPages > 1 && (
           <div className="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50/50">

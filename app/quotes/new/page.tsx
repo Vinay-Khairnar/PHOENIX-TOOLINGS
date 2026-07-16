@@ -286,7 +286,7 @@ export default function Home() {
       </div>
 
       {/* Right Column: Sticky Sidebar */}
-      <div className="w-full md:w-[400px] xl:w-[450px] shrink-0 flex flex-col gap-6 h-fit sticky top-8">
+      <div className="w-full md:w-[400px] xl:w-[450px] shrink-0 flex flex-col gap-6 h-fit relative md:sticky top-8">
         
         {/* 1. Product Search */}
         <section className="bg-white border border-[#e0e0e0] rounded-[18px] p-6 shadow-sm flex flex-col gap-5 relative z-10">

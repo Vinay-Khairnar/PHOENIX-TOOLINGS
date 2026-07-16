@@ -9,11 +9,11 @@ export default async function Home() {
 
   return (
     <div className="flex-1 w-full max-w-[1440px] mx-auto p-4 md:p-8 flex flex-col items-center justify-center min-h-[calc(100vh-44px)] pb-32">
-      <div className="text-center mb-24">
-        <h1 className="text-[56px] font-semibold tracking-[-0.28px] leading-[1.07] mb-4">
+      <div className="text-center mb-16 md:mb-24">
+        <h1 className="text-[36px] md:text-[56px] font-semibold tracking-[-0.28px] leading-[1.1] mb-4 px-2">
           {titleText}
         </h1>
-        <p className="text-[28px] font-normal tracking-[0.196px] text-[#7a7a7a]">
+        <p className="text-[18px] md:text-[28px] font-normal tracking-[0.196px] text-[#7a7a7a]">
           Professional quotations in seconds.
         </p>
       </div>

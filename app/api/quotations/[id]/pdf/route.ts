@@ -153,13 +153,8 @@ export async function GET(
     const rightLabelW = rightWidth * 0.45;
     const rightX = MARGIN_LEFT + leftWidth;
     
-    // Draw horizontal lines for the 4 rows on the right
+    // (Horizontal and vertical separation lines removed as per user request)
     const rightRowH = row2Height / 4;
-    for(let i=1; i<4; i++) {
-        page.drawLine({ start: { x: rightX, y: y - i*rightRowH }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - i*rightRowH }, thickness: 1, color: rgb(0,0,0) });
-    }
-    // Draw vertical line separating label and value
-    page.drawLine({ start: { x: rightX + rightLabelW, y }, end: { x: rightX + rightLabelW, y: y - row2Height }, thickness: 1, color: rgb(0,0,0) });
 
     const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
     const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
@@ -170,10 +165,10 @@ export async function GET(
         page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
     }
 
-    drawRightCell("QTY NO.-", quote.quoteNumber, 0);
-    drawRightCell("QTN DATE", qtnDate, 1);
-    drawRightCell("REF NO.-", quote.refNumber || "AS PER VISIT", 2);
-    drawRightCell("REF DATE.-", refDate, 3);
+    drawRightCell("QTY NO.:", quote.quoteNumber, 0);
+    drawRightCell("QTN DATE:", qtnDate, 1);
+    drawRightCell("REF NO.:", quote.refNumber || "AS PER VISIT", 2);
+    drawRightCell("REF DATE.:", refDate, 3);
 
     y -= row2Height;
 
@@ -202,6 +197,15 @@ export async function GET(
     // 6. Table Body (Fixed grid)
     const numRows = 12;
     const rowHeight = 18; // slightly smaller row height to fit everything nicely
+    const tableBodyHeight = numRows * rowHeight;
+
+    // Draw outer rectangle for the whole table body and vertical column lines
+    page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
+    let vertX = MARGIN_LEFT;
+    for (let j = 0; j < colWidths.length - 1; j++) {
+        vertX += colWidths[j];
+        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0,0,0) });
+    }
     
     for (let i = 0; i < numRows; i++) {
         const item = currentChunk[i];
@@ -227,7 +231,6 @@ export async function GET(
 
         let curRowX = MARGIN_LEFT;
         for (let j = 0; j < colWidths.length; j++) {
-            page.drawRectangle({ x: curRowX, y: y - rowHeight, width: colWidths[j], height: rowHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
             if (rowTexts[j]) {
                 const align = (j === 0 || j === 3 || j === 6) ? 'center' : (j >= 4 ? 'right' : 'left');
                 
@@ -253,23 +256,21 @@ export async function GET(
     const totalsBoxWidth = CONTENT_WIDTH - bankBoxWidth;
     const summaryHeight = 100;
     
+    const isLastPage = pageIndex === chunks.length - 1;
+    
     // Draw outer summary box
     page.drawRectangle({ x: MARGIN_LEFT, y: y - summaryHeight, width: CONTENT_WIDTH, height: summaryHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
     page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0,0,0) });
 
-    const totalLabelW = totalsBoxWidth * 0.6;
-    page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0,0,0) });
-
-    for (let i = 1; i < 5; i++) {
-        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - i * 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - i * 20 }, thickness: 1, color: rgb(0,0,0) });
-    }
-
     const bankPad = MARGIN_LEFT + 5;
-    page.drawText("BANK DETAILS", { x: bankPad, y: y - 14, size: 10, font: boldFont });
-    page.drawText(`BANK NAME-${settings?.bankName || 'ICICI BANK'}`, { x: bankPad, y: y - 34, size: 10, font: boldFont });
-    page.drawText(`ACCOUNT NO-${settings?.accountNumber || '145405004957'}`, { x: bankPad, y: y - 54, size: 10, font: boldFont });
-    page.drawText(`IFSC CODE-${settings?.ifscCode || 'ICIC0001454'}`, { x: bankPad, y: y - 74, size: 10, font: boldFont });
+    page.drawText("BANK DETAILS", { x: bankPad, y: y - 12, size: 10, font: boldFont });
+    page.drawText(`BANK NAME-${settings?.bankName || 'ICICI BANK'}`, { x: bankPad, y: y - 28, size: 10, font: boldFont });
+    page.drawText(`ACCOUNT NO-${settings?.accountNumber || '145405004957'}`, { x: bankPad, y: y - 44, size: 10, font: boldFont });
+    page.drawText(`IFSC CODE-${settings?.ifscCode || 'ICIC0001454'}`, { x: bankPad, y: y - 60, size: 10, font: boldFont });
 
+    page.drawLine({ start: { x: MARGIN_LEFT, y: y - 72 }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - 72 }, thickness: 1, color: rgb(0,0,0) });
+    const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
+    page.drawText(gstStr, { x: bankPad, y: y - 88, size: 12, font: boldFont });
 
     const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false) => {
         const f = isBold ? boldFont : font;
@@ -278,11 +279,23 @@ export async function GET(
         page.drawText(amountStr, { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f });
     };
 
-    drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
-    drawTaxRow(y - 20, `CGST ${quote.cgst || 9}%`, formatIndianCurrency(cgstAmt));
-    drawTaxRow(y - 40, `SGST ${quote.sgst || 9}%`, formatIndianCurrency(sgstAmt));
-    drawTaxRow(y - 60, `IGST ${quote.igst || 0}%`, formatIndianCurrency(igstAmt));
-    drawTaxRow(y - 80, "TOTAL", formatIndianCurrency(grandTotal), true);
+    if (isLastPage) {
+        const totalLabelW = totalsBoxWidth * 0.6;
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0,0,0) });
+
+        for (let i = 1; i < 5; i++) {
+            page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - i * 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - i * 20 }, thickness: 1, color: rgb(0,0,0) });
+        }
+
+        drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
+        drawTaxRow(y - 20, `CGST ${quote.cgst || 9}%`, formatIndianCurrency(cgstAmt));
+        drawTaxRow(y - 40, `SGST ${quote.sgst || 9}%`, formatIndianCurrency(sgstAmt));
+        drawTaxRow(y - 60, `IGST ${quote.igst || 0}%`, formatIndianCurrency(igstAmt));
+        drawTaxRow(y - 80, "TOTAL", formatIndianCurrency(grandTotal), true);
+    } else {
+        const contText = "Continued on next page...";
+        page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10))/2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
+    }
 
     y -= summaryHeight;
 
@@ -312,12 +325,8 @@ export async function GET(
     let termY = y - 20;
     const termRowH = 90 / 5; // 18
     for (let i = 0; i < 5; i++) {
-        // Horizontal line
-        if (i > 0) {
-            page.drawLine({ start: { x: MARGIN_LEFT, y: termY }, end: { x: MARGIN_LEFT + bankBoxWidth, y: termY }, thickness: 1, color: rgb(0,0,0) });
-        }
-        // Vertical line for numbers
-        page.drawLine({ start: { x: MARGIN_LEFT + 25, y: termY }, end: { x: MARGIN_LEFT + 25, y: termY - termRowH }, thickness: 1, color: rgb(0,0,0) });
+        // (Horizontal and vertical lines removed as per user request)
+
         
         page.drawText((i+1).toString(), { x: MARGIN_LEFT + 10, y: termY - 12, size: 9, font: font });
         const termText = termsLines[i] || "";
@@ -328,8 +337,15 @@ export async function GET(
 
     // Right side sign
     const signX = MARGIN_LEFT + bankBoxWidth;
-    const companyName = `FOR, ${settings?.companyName || 'PHOENIX TOOLINGS'}`;
-    page.drawText(companyName, { x: signX + (totalsBoxWidth - boldFont.widthOfTextAtSize(companyName, 10))/2, y: y - 15, size: 10, font: boldFont });
+    const forText = "FOR, ";
+    const companyNameText = settings?.companyName || 'PHOENIX TOOLINGS';
+    const forWidth = font.widthOfTextAtSize(forText, 10);
+    const companyWidth = boldFont.widthOfTextAtSize(companyNameText, 10);
+    const totalTitleWidth = forWidth + companyWidth;
+    
+    const titleStartX = signX + (totalsBoxWidth - totalTitleWidth) / 2;
+    page.drawText(forText, { x: titleStartX, y: y - 15, size: 10, font: font });
+    page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 15, size: 10, font: boldFont });
     
     // Embed stamp image
     try {
@@ -337,9 +353,9 @@ export async function GET(
       if (fs.existsSync(stampPath)) {
         const stampBytes = fs.readFileSync(stampPath);
         const stampImage = await pdfDoc.embedJpg(stampBytes);
-        const stampDims = stampImage.scaleToFit(130, 45);
-        const stampDrawX = signX + (totalsBoxWidth - stampDims.width) / 2;
-        const stampDrawY = y - termsHeight + 22; // Just above the line
+        const stampDims = stampImage.scaleToFit(130, 65);
+        const stampDrawX = signX + totalsBoxWidth - stampDims.width - 5;
+        const stampDrawY = y - termsHeight + 22;
         page.drawImage(stampImage, {
           x: stampDrawX,
           y: stampDrawY,
@@ -350,7 +366,7 @@ export async function GET(
     } catch (e) {
       console.error('Failed to embed stamp image:', e);
     }
-    
+
     page.drawLine({ start: { x: signX, y: y - termsHeight + 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - termsHeight + 20 }, thickness: 1, color: rgb(0,0,0) });
     const signText = "Authorised Signatory";
     page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10))/2, y: y - termsHeight + 6, size: 10, font: font });
