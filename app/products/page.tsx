@@ -212,14 +212,14 @@ export default function ProductsPage() {
                         {product.name}
                       </span>
                     </td>
-                    <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
+                    <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50 sm:text-right">
                       <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Price</span>
-                      <span className="text-slate-900 font-medium tabular-nums sm:text-right w-full sm:w-auto text-right">
+                      <span className="text-slate-900 font-medium tabular-nums w-full sm:w-auto text-right">
                         {formatCurrency(product.price)}
                       </span>
                     </td>
-                    <td className="px-1 sm:px-6 py-4 sm:py-4 flex justify-end sm:table-cell mt-2 sm:mt-0">
-                      <div className="flex justify-end gap-2 w-full sm:w-auto">
+                    <td className="px-1 sm:px-6 py-4 sm:py-4 flex justify-end sm:table-cell mt-2 sm:mt-0 sm:text-right">
+                      <div className="flex justify-end gap-2 w-full">
                         <button 
                           onClick={() => handleDelete(product.id)}
                           className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2.5 sm:p-1.5 text-slate-600 sm:text-slate-400 bg-slate-50 sm:bg-transparent hover:text-red-600 hover:bg-red-50 rounded-xl sm:rounded-lg transition-colors font-medium text-sm sm:text-base border border-slate-200 sm:border-0"
