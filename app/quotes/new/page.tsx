@@ -150,8 +150,26 @@ export default function Home() {
       const quote = await res.json();
       
       reset();
+      
+      // Fetch and download PDF programmatically to avoid blank new tabs
+      try {
+        const pdfRes = await fetch(`/api/quotations/${quote.id}/pdf`);
+        if (pdfRes.ok) {
+          const blob = await pdfRes.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${quote.quoteNumber}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+      } catch (pdfError) {
+        console.error('Failed to download PDF:', pdfError);
+      }
+      
       toast.success('Quotation generated successfully!', { id: loadingToast });
-      window.open(`/api/quotations/${quote.id}/pdf`, '_blank');
       router.push(`/quotes/${quote.id}`);
     } catch (error: any) {
       console.error(error);

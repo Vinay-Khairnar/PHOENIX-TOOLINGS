@@ -4,6 +4,7 @@ import { ArrowLeft, Download, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/format';
 import { DeleteQuoteButton } from '../DeleteQuoteButton';
+import { DownloadQuoteButton } from '../DownloadQuoteButton';
 
 export default async function QuotePage({
   params,
@@ -48,15 +49,7 @@ export default async function QuotePage({
             
             <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
               <DeleteQuoteButton id={quote.id} redirect={true} />
-              <a 
-                href={`/api/quotations/${quote.id}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full sm:w-auto justify-center bg-[#0066cc] text-white rounded-full py-2.5 px-6 text-[14px] font-semibold hover:bg-[#0071e3] transition-all flex items-center gap-2 whitespace-nowrap shadow-[0_4px_14px_0_rgba(0,102,204,0.39)] hover:shadow-[0_6px_20px_rgba(0,102,204,0.23)]"
-              >
-                <Download className="w-4 h-4" />
-                Download PDF
-              </a>
+              <DownloadQuoteButton id={quote.id} quoteNumber={quote.quoteNumber} />
             </div>
           </div>
           

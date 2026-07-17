@@ -90,7 +90,7 @@ export default function Header({ titleText, isAdmin }: { titleText: string, isAd
 
       {/* Mobile Navigation Drawer */}
       {isMobileMenuOpen && (
-        <div className="sm:hidden fixed top-[64px] left-0 right-0 bottom-0 bg-white z-[60] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="sm:hidden fixed inset-0 top-[64px] bg-white z-50 overflow-y-auto border-t border-slate-100">
           <nav className="px-4 py-6 flex flex-col gap-2 min-h-full">
             <MobileLink href="/">Home</MobileLink>
             <MobileLink href="/quotes">Quotations</MobileLink>

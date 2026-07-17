@@ -483,7 +483,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${quote.quoteNumber}.pdf"`,
+        'Content-Disposition': `inline; filename="${quote.quoteNumber}.pdf"`,
       },
     });
 
