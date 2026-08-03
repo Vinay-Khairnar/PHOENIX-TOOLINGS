@@ -210,8 +210,8 @@ export async function GET(
         page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
       }
 
-      drawRightCell("QTY NO.:", quote.quoteNumber, 0);
-      drawRightCell("QTN DATE:", qtnDate, 1);
+      drawRightCell("Quot NO.:", quote.quoteNumber, 0);
+      drawRightCell("DATE:", qtnDate, 1);
       drawRightCell("REF NO.:", quote.refNumber || "AS PER VISIT", 2);
       drawRightCell("REF DATE.:", refDate, 3);
 
@@ -220,12 +220,12 @@ export async function GET(
       // 3. KIND ATTN
       const row3Height = 20;
       page.drawRectangle({ x: MARGIN_LEFT, y: y - row3Height, width: CONTENT_WIDTH, height: row3Height, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      page.drawText(`KIND ATTN- ${quote.contactPerson || ''}`, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
+      page.drawText(`KIND ATTN : ${quote.contactPerson || ''}`, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
       y -= row3Height;
 
       // 4. Reference
       const row4Height = 20;
-      drawGridCell("With Reference to your enquiry we are submitting our quotation as follows", MARGIN_LEFT, y, CONTENT_WIDTH, row4Height, font, 9, 'center');
+      drawGridCell("With Reference to your enquiry we are submitting our quotation as follows", MARGIN_LEFT, y, CONTENT_WIDTH, row4Height, font, 9, 'center', false);
       y -= row4Height;
 
       // 5. Table Header
