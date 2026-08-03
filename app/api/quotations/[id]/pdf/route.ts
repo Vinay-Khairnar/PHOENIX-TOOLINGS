@@ -16,6 +16,14 @@ function formatIndianCurrency(num: number): string {
   return res;
 }
 
+function hexColor(hex: string) {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  return rgb(r, g, b);
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -180,7 +188,7 @@ export async function GET(
       const infoFontSize = 8;
       let infoY = A4_HEIGHT - 55;
       const infoStartX = MARGIN_LEFT + 15;
-      const labelColor = rgb(1, 0, 0);
+      const labelColor = hexColor('#D51947');
       for (const line of infoLines) {
         const labelWidth = boldFont.widthOfTextAtSize(line.label, infoFontSize);
         page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
@@ -370,7 +378,7 @@ export async function GET(
 
         drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
         drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
-        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, rgb(1, 0, 0));
+        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, labelColor);
       } else {
         const contText = "Continued on next page...";
         page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
