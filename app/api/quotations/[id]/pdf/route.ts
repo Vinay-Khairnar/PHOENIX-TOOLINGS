@@ -225,10 +225,10 @@ export async function GET(
         page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
       }
 
-      drawRightCell("Quot NO.:", quote.quoteNumber, 0);
-      drawRightCell("DATE:", qtnDate, 1);
-      drawRightCell("REF NO.:", quote.refNumber || "AS PER VISIT", 2);
-      drawRightCell("REF DATE.:", refDate, 3);
+      drawRightCell("QUOTATION NO. :", quote.quoteNumber, 0);
+      drawRightCell("DATE :", qtnDate, 1);
+      drawRightCell("REF NO. :", quote.refNumber || "AS PER VISIT", 2);
+      drawRightCell("REF DATE. :", refDate, 3);
 
       y -= row2Height;
 
@@ -377,35 +377,69 @@ export async function GET(
       y -= 15;
 
       // 8. Terms & Conditions
-      const termsHeight = 110;
+      const termsHeight = 140;
       page.drawRectangle({ x: MARGIN_LEFT, y: y - termsHeight, width: CONTENT_WIDTH, height: termsHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
       page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - termsHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
       // Left side terms header
       page.drawRectangle({ x: MARGIN_LEFT, y: y - 20, width: bankBoxWidth, height: 20, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      page.drawText("TERMS & CONDITIONS", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: font });
+      page.drawText("Terms and Condition :", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: boldFont });
 
-      let termsLines = (settings?.termsAndConditions || "").split('\n').filter(Boolean);
-      if (termsLines.length === 0) {
-        termsLines = [
-          "Order To Be Release on PHOENIX TOOLINGS.",
-          "Prices are net ex.works ch. Sambhaji Nagar, packing & forwarding extra.",
-          "Payment terms- 100% Advance along with Purchase order.",
-          "Delivery terms- 2 Week From The Date Of Order.",
-          "Validity Of Quotation- 30 Days"
-        ];
+      const defaultTerms = [
+        { label: "1) GST", value: ": 18%" },
+        { label: "2) Delivery", value: ": Two Weeks from the date of receipt of purchase order" },
+        { label: "3) Payment", value: ": 100% Against Proforma" },
+        { label: "4) Validity", value: ": 1 Week" },
+        { label: "5) P & F Extra", value: ": NA" },
+        { label: "6) Insurance", value: ": At your end" },
+        { label: "7) Note", value: ": 18% interest will be charged on the value of invoice, If not paid within 30 days from the date of invoice." },
+      ];
+
+      let structuredTerms: { label: string; value: string }[] = [];
+      const rawTerms = (settings?.termsAndConditions || "").split('\n').filter(Boolean);
+      for (const line of rawTerms) {
+        const match = line.match(/^(\d+\)\s*[^:]+)\s*:\s*(.*)$/);
+        if (match) {
+          structuredTerms.push({ label: match[1].trim(), value: ": " + match[2].trim() });
+        }
+      }
+      if (structuredTerms.length === 0) {
+        structuredTerms = defaultTerms;
       }
 
+      const termLabelX = MARGIN_LEFT + 5;
+      const termValueX = MARGIN_LEFT + 105;
       let termY = y - 20;
-      const termRowH = 90 / 5; // 18
-      for (let i = 0; i < 5; i++) {
-        // (Horizontal and vertical lines removed as per user request)
-
-
-        page.drawText((i + 1).toString(), { x: MARGIN_LEFT + 10, y: termY - 12, size: 9, font: font });
-        const termText = termsLines[i] || "";
-        page.drawText(termText.substring(0, 70), { x: MARGIN_LEFT + 30, y: termY - 12, size: 9, font: font });
-
+      const termRowH = 15;
+      for (const term of structuredTerms) {
+        page.drawText(term.label, { x: termLabelX, y: termY - 12, size: 9, font: boldFont });
+        // Check if value needs to wrap
+        const maxValueWidth = bankBoxWidth - 115;
+        if (font.widthOfTextAtSize(term.value, 9) > maxValueWidth) {
+          const colonOffset = font.widthOfTextAtSize(": ", 9);
+          let line1 = "";
+          for (let c = 0; c < term.value.length; c++) {
+            if (font.widthOfTextAtSize(line1 + term.value[c], 9) > maxValueWidth) {
+              const lastSpace = line1.lastIndexOf(' ');
+              if (lastSpace > 0) {
+                page.drawText(line1.substring(0, lastSpace), { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(line1.substring(lastSpace + 1) + term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              } else {
+                page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              }
+              break;
+            }
+            line1 += term.value[c];
+            if (c === term.value.length - 1) {
+              page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+            }
+          }
+        } else {
+          page.drawText(term.value, { x: termValueX, y: termY - 12, size: 9, font: font });
+        }
         termY -= termRowH;
       }
 

@@ -26,7 +26,7 @@ const defaultSettings: SettingsData = {
   bankName: 'ICICI BANK',
   accountNumber: '145405004957',
   ifscCode: 'ICIC0001454',
-  termsAndConditions: '1. Order To Be Release on PHOENIX TOOLINGS.\n2. Prices are net ex.works Ch. Sambhaji Nagar, packing & forwarding extra.\n3. Payment terms- 20% Advance along with Purchase order Balance Against PI.\n4. Delivery terms- 8 Week From The Date Of Order.\n5. Validity Of Quotation- 30 Days',
+  termsAndConditions: '1) GST : 18%\n2) Delivery : Two Weeks from the date of receipt of purchase order\n3) Payment : 100% Against Proforma\n4) Validity : 1 Week\n5) P & F Extra : NA\n6) Insurance : At your end\n7) Note : 18% interest will be charged on the value of invoice, If not paid within 30 days from the date of invoice.',
   startingQuoteNumber: 1,
 };
 
@@ -39,6 +39,9 @@ export default function SettingsPage() {
     fetch('/api/settings')
       .then(res => res.json())
       .then(data => {
+        // Use new default terms if DB terms are in old format (don't contain "N) Label : Value" pattern)
+        const dbTerms = data.termsAndConditions || '';
+        const hasNewFormat = /^\d+\)/.test(dbTerms);
         setFormData({
           companyName: data.companyName || defaultSettings.companyName,
           address: data.address || defaultSettings.address,
@@ -48,7 +51,7 @@ export default function SettingsPage() {
           bankName: data.bankName || defaultSettings.bankName,
           accountNumber: data.accountNumber || defaultSettings.accountNumber,
           ifscCode: data.ifscCode || defaultSettings.ifscCode,
-          termsAndConditions: data.termsAndConditions || defaultSettings.termsAndConditions,
+          termsAndConditions: hasNewFormat ? dbTerms : defaultSettings.termsAndConditions,
           startingQuoteNumber: data.startingQuoteNumber || defaultSettings.startingQuoteNumber,
         });
       })
