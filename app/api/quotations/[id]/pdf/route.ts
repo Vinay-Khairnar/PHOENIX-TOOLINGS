@@ -170,7 +170,22 @@ export async function GET(
         size: 14,
         font: boldFont
       });
-      // Removed the full-width row1Height cell, y remains at TOP_MARGIN
+
+      // Company info lines below QUOTATION title
+      const infoLines = [
+        { label: "WORKS : ", value: "A-51 MIDC WALUJ,  AURANGABAD - 431 136, MAHARASTRA, INDIA." },
+        { label: "CALL : ", value: "+91 9890448625 / +91 9766791555" },
+        { label: "E-mail : ", value: "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com" },
+      ];
+      const infoFontSize = 8;
+      let infoY = A4_HEIGHT - 55;
+      const infoStartX = MARGIN_LEFT + 15;
+      for (const line of infoLines) {
+        const labelWidth = font.widthOfTextAtSize(line.label, infoFontSize);
+        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: font });
+        page.drawText(line.value, { x: infoStartX + labelWidth, y: infoY, size: infoFontSize, font: boldFont });
+        infoY -= 12;
+      }
 
       // 2. Info Block
       const leftWidth = CONTENT_WIDTH * 0.61;
@@ -276,7 +291,7 @@ export async function GET(
         for (let j = 0; j < colWidths.length; j++) {
           if (rowTexts[j]) {
             let align: 'left' | 'center' | 'right' = 'left';
-            if (j === 4 || j === 6) align = 'center';
+            if (j === 0 || j === 2 || j === 3 || j === 4 || j === 6) align = 'center';
             if (j === 5 || j === 7 || j === 8) align = 'right';
 
             const breakText = (str: string, maxW: number) => {
