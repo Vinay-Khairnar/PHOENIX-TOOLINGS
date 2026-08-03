@@ -18,7 +18,7 @@ const COLUMN_MAP: Record<string, string[]> = {
   name: ['material', 'description', 'product', 'item', 'title', 'name'],
   price: ['price', 'rate', 'cost', 'amount', 'value', 'gross price', 'agreed rate'],
   sku: ['sku', 'code', 'cat', 'catalogue', 'catalog'],
-  articleNumber: ['article', 'art', 'part', 'tool no'],
+  itemNumber: ['article', 'art', 'part', 'tool no'],
   description: ['grade', 'detail', 'info', 'spec'],
 };
 
@@ -112,7 +112,7 @@ function processWithHeaderIndex(
   const nameCol = findColumnIndex(headers, COLUMN_MAP.name);
   const priceCol = findColumnIndex(headers, COLUMN_MAP.price);
   const skuCol = findColumnIndex(headers, COLUMN_MAP.sku);
-  const articleCol = findColumnIndex(headers, COLUMN_MAP.articleNumber);
+  const articleCol = findColumnIndex(headers, COLUMN_MAP.itemNumber);
   const descCol = findColumnIndex(headers, COLUMN_MAP.description);
 
   const items: any[] = [];
@@ -129,7 +129,7 @@ function processWithHeaderIndex(
     const name = nameCol >= 0 ? row[nameCol] : undefined;
     const priceRaw = priceCol >= 0 ? row[priceCol] : undefined;
     const sku = skuCol >= 0 ? row[skuCol] : undefined;
-    const articleNumber = articleCol >= 0 ? row[articleCol] : undefined;
+    const itemNumber = articleCol >= 0 ? row[articleCol] : undefined;
     const description = descCol >= 0 ? row[descCol] : undefined;
 
     const nameStr = name != null ? String(name).trim() : '';
@@ -144,9 +144,9 @@ function processWithHeaderIndex(
     items.push({
       name: nameStr,
       sku: sku != null && String(sku).trim() ? String(sku).trim() : null,
-      articleNumber:
-        articleNumber != null && String(articleNumber).trim()
-          ? String(articleNumber).trim()
+      itemNumber:
+        itemNumber != null && String(itemNumber).trim()
+          ? String(itemNumber).trim()
           : null,
       price,
       description:
@@ -164,9 +164,14 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const make = formData.get('make') as string;
 
     if (!file || file.size === 0) {
       return NextResponse.json({ error: 'No file uploaded or file is empty' }, { status: 400 });
+    }
+
+    if (!make) {
+      return NextResponse.json({ error: 'Make is required' }, { status: 400 });
     }
 
     const buffer = await file.arrayBuffer();
@@ -213,7 +218,7 @@ export async function POST(request: Request) {
           continue;
         }
         
-        // Match format 1: 1 2345 lorem 1 ₹8,000 (Sr. No., Part No., Description, Price)
+        // Match format 1: 1 2345 lorem 1 ₹8,000 (Sr. No., Item No., Description, Price)
         const match1 = line.match(/^(\d+)\s+(\S+)\s+(.+?)\s+(?:₹|Rs\.?)?\s*([\d,.]+)$/i);
         // Match format 2: AX 11-CF Ø 6.0 mm 1 B 482.75436 n 17,983.00 (Description, Grade, Cat No, Optional currency/text, Price)
         const match2 = line.match(/^(.+?)\s+(\S+)\s+(\S+)\s+(?:[a-zA-Z]+\s+)?([\d,.]+)$/i);
@@ -227,7 +232,7 @@ export async function POST(request: Request) {
           if (itemName && !isNaN(price) && price > 0) {
             validItems.push({
               name: itemName.trim(),
-              articleNumber: artNo.trim(),
+              itemNumber: artNo.trim(),
               sku: null,
               description: null,
               price: price
@@ -245,7 +250,7 @@ export async function POST(request: Request) {
           if (descPart && !isNaN(price) && price > 0) {
             validItems.push({
               name: `${descPart} ${grade}`, // Combine description and grade
-              articleNumber: catNo,
+              itemNumber: catNo,
               sku: null,
               description: null,
               price: price
@@ -276,6 +281,10 @@ export async function POST(request: Request) {
 
     // Products will now be appended. Users can use the 'Delete All' button in the UI if they want to wipe the list before importing.
 
+    if (make) {
+      validItems = validItems.map(item => ({ ...item, make: make.toUpperCase() }));
+    }
+
     // Insert in batches of 1000
     const BATCH_SIZE = 1000;
     for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
@@ -290,8 +299,12 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error(error);
+    try {
+      const errorStr = error instanceof Error ? error.stack : JSON.stringify(error);
+      require('fs').writeFileSync('/tmp/import-error.log', String(errorStr));
+    } catch(e) {}
     return NextResponse.json(
-      { error: 'Failed to import products' },
+      { error: 'Failed to import products', details: error instanceof Error ? error.message : JSON.stringify(error), stack: error instanceof Error ? error.stack : undefined },
       { status: 500 }
     );
   }

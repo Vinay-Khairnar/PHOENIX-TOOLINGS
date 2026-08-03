@@ -84,7 +84,9 @@ export default async function QuotePage({
                 <tr key={item.id} className="border-b border-[#f0f0f0]">
                   <td className="py-4 text-[14px]">
                     <div className="font-medium text-slate-900">{item.name}</div>
-                    {item.articleNumber && <div className="text-[12px] text-slate-500">Part No: {item.articleNumber}</div>}
+                    {item.make && <div className="text-[12px] text-slate-500">Make: {item.make.toUpperCase()}</div>}
+                    {item.itemNumber && <div className="text-[12px] text-slate-500">Item No: {item.itemNumber}</div>}
+                    {item.drgNumber && <div className="text-[12px] text-slate-500">Drg No: {item.drgNumber}</div>}
                   </td>
                   <td className="py-4 px-2 sm:px-6 text-[14px] text-right font-medium">{formatCurrency(item.price)}</td>
                   <td className="py-4 px-2 sm:px-6 text-[14px] text-center">{item.quantity}</td>

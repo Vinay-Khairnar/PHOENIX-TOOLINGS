@@ -43,16 +43,16 @@ export async function GET(
       .select('*')
       .eq('id', 'default')
       .maybeSingle();
-    
+
     // Create PDF
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont((StandardFonts as any).Helvetica);
     const boldFont = await pdfDoc.embedFont((StandardFonts as any).HelveticaBold);
-    
+
     let letterheadBytes;
     try {
       letterheadBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'letterHead.png'));
-    } catch (e) {}
+    } catch (e) { }
 
     let letterheadImage: any;
     if (letterheadBytes) {
@@ -62,7 +62,7 @@ export async function GET(
     let headerLogoBytes;
     try {
       headerLogoBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'headerLogo.png'));
-    } catch (e) {}
+    } catch (e) { }
 
     let headerLogoImage: any;
     if (headerLogoBytes) {
@@ -78,7 +78,7 @@ export async function GET(
       try {
         const partnersPathPng = path.join(process.cwd(), 'public', 'partners.png');
         partnersBytes = fs.readFileSync(partnersPathPng);
-      } catch (e2) {}
+      } catch (e2) { }
     }
 
     let partnersImage: any;
@@ -88,17 +88,17 @@ export async function GET(
       } catch (e) {
         try {
           partnersImage = await pdfDoc.embedPng(partnersBytes);
-        } catch (e2) {}
+        } catch (e2) { }
       }
     }
 
     const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
-    
+
     // Standard margins for decoupled header and footer images
-    const CONTENT_WIDTH = 520; // Reduced width to avoid right red banner
-    const MARGIN_LEFT = 20;
-    const TOP_MARGIN = A4_HEIGHT - 110; // Moved up to reduce whitespace
-    
+    const CONTENT_WIDTH = 550; // Reduced width to avoid right red banner
+    const MARGIN_LEFT = 10;
+    const TOP_MARGIN = A4_HEIGHT - 105; // Moved up to reduce whitespace
+
     // Global Totals Calculation
     let globalSubtotal = 0;
     for (const item of quote.items) {
@@ -108,10 +108,8 @@ export async function GET(
     }
     const discountAmount = globalSubtotal * ((quote.discount || 0) / 100);
     const taxableAmount = globalSubtotal - discountAmount;
-    const cgstAmt = taxableAmount * ((quote.cgst || 0) / 100);
-    const sgstAmt = taxableAmount * ((quote.sgst || 0) / 100);
-    const igstAmt = taxableAmount * ((quote.igst || 0) / 100);
-    const grandTotal = taxableAmount + cgstAmt + sgstAmt + igstAmt;
+    const gstAmt = taxableAmount * 0.18;
+    const grandTotal = taxableAmount + gstAmt;
 
     const chunks = [];
     if (quote.items.length === 0) chunks.push([]);
@@ -125,355 +123,399 @@ export async function GET(
       let page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
       let y = TOP_MARGIN;
 
-    const addBackground = () => {
-      if (letterheadImage) {
-        page.drawImage(letterheadImage, {
-          x: 0,
-          y: 0,
-          width: A4_WIDTH,
-          height: A4_HEIGHT,
-        });
+      const addBackground = () => {
+        if (letterheadImage) {
+          page.drawImage(letterheadImage, {
+            x: 0,
+            y: 0,
+            width: A4_WIDTH,
+            height: A4_HEIGHT,
+          });
+        }
+        if (headerLogoImage) {
+          const dims = headerLogoImage.scaleToFit(200, 80);
+          page.drawImage(headerLogoImage, {
+            x: MARGIN_LEFT + CONTENT_WIDTH - dims.width, // Align with right side of the table
+            y: A4_HEIGHT - dims.height - 15,
+            width: dims.width,
+            height: dims.height,
+          });
+        }
+
+
+      };
+
+      addBackground();
+
+      const drawGridCell = (text: string, x: number, yPos: number, w: number, h: number, f: any, size: number, align: 'left' | 'center' | 'right' = 'left', drawBox = true) => {
+        if (drawBox) {
+          page.drawRectangle({ x, y: yPos - h, width: w, height: h, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+        }
+        if (text) {
+          const textWidth = f.widthOfTextAtSize(text, size);
+          let textX = x + 3;
+          if (align === 'center') textX = x + (w - textWidth) / 2;
+          if (align === 'right') textX = x + w - textWidth - 3;
+          const textY = yPos - h / 2 - size / 3;
+          page.drawText(text, { x: textX, y: textY, size, font: f });
+        }
       }
-      if (headerLogoImage) {
-        const dims = headerLogoImage.scaleToFit(200, 80);
-        page.drawImage(headerLogoImage, {
-          x: MARGIN_LEFT + CONTENT_WIDTH - dims.width, // Align with right side of the table
-          y: A4_HEIGHT - dims.height - 15,
-          width: dims.width,
-          height: dims.height,
-        });
+
+      // 1. QUOTATION Title
+      const quotationTitleStr = "QUOTATION";
+      const quotationTitleWidth = boldFont.widthOfTextAtSize(quotationTitleStr, 14);
+      page.drawText(quotationTitleStr, {
+        x: MARGIN_LEFT + (CONTENT_WIDTH - quotationTitleWidth) / 2,
+        y: A4_HEIGHT - 20,
+        size: 14,
+        font: boldFont
+      });
+
+      // Company info lines below QUOTATION title
+      const infoLines = [
+        { label: "WORKS : ", value: "A-51 MIDC WALUJ,  AURANGABAD - 431 136, MAHARASTRA, INDIA." },
+        { label: "CALL : ", value: "+91 9890448625 / +91 9766791555" },
+        { label: "E-mail : ", value: "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com" },
+      ];
+      const infoFontSize = 8;
+      let infoY = A4_HEIGHT - 55;
+      const infoStartX = MARGIN_LEFT + 15;
+      const labelColor = rgb(1, 0, 0);
+      for (const line of infoLines) {
+        const labelWidth = boldFont.widthOfTextAtSize(line.label, infoFontSize);
+        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+        page.drawText(line.value, { x: infoStartX + labelWidth, y: infoY, size: infoFontSize, font: boldFont });
+        infoY -= 12;
       }
-      // Draw dynamic footer text instead of an image
-      const footerY = 40;
-      
-      const gstColor = rgb(0.5, 0.5, 0.5);
-      const redColor = rgb(0.83, 0.12, 0.25);
-      
-      // Left side: GST No.
-      page.drawText("GST No. : 27AFWPG3321F1ZH", { x: 40, y: footerY - 6, size: 9, font: boldFont, color: gstColor });
-      
-      // Center side: Address
-      const centerLine1 = "A-51, MIDC Waluj, Aurangabad-431 136.";
-      const centerLine2 = "(Maharashtra), India.";
-      const centerLine3 = "Mfg. of ISO & Tailor Made Indexable Tool Holders";
-      
-      const centerX = 190;
-      page.drawText(centerLine1, { x: centerX, y: footerY + 12, size: 9, font: font, color: redColor });
-      page.drawText(centerLine2, { x: centerX, y: footerY, size: 9, font: font, color: redColor });
-      page.drawText(centerLine3, { x: centerX, y: footerY - 12, size: 8, font: font, color: gstColor });
-      
-      // Vertical line divider
-      const lineX = 390;
-      page.drawLine({ start: { x: lineX, y: footerY + 15 }, end: { x: lineX, y: footerY - 25 }, thickness: 0.5, color: gstColor });
-      
-      // Right side: Contact
-      const rightX = 400;
-      page.drawText("M", { x: rightX, y: footerY + 12, size: 9, font: boldFont, color: redColor });
-      page.drawText(" : +91 9890448625,", { x: rightX + 10, y: footerY + 12, size: 8, font: font, color: gstColor });
-      
-      page.drawText("E", { x: rightX, y: footerY, size: 9, font: boldFont, color: redColor });
-      page.drawText(" : gbs@phoenixtoolings.com", { x: rightX + 10, y: footerY, size: 8, font: font, color: gstColor });
-      
-      page.drawText("E", { x: rightX, y: footerY - 12, size: 9, font: boldFont, color: redColor });
-      page.drawText(" : mayur@phoenixtoolings.com", { x: rightX + 10, y: footerY - 12, size: 8, font: font, color: gstColor });
-      
-      page.drawText("AN ISO 9001:2015 CERTIFIED COMPANY", { x: rightX, y: footerY - 24, size: 8, font: font, color: gstColor });
-    };
 
-    addBackground();
-    
-    const drawGridCell = (text: string, x: number, yPos: number, w: number, h: number, f: any, size: number, align: 'left' | 'center' | 'right' = 'left', drawBox = true) => {
-      if (drawBox) {
-        page.drawRectangle({ x, y: yPos - h, width: w, height: h, borderColor: rgb(0,0,0), borderWidth: 1 });
+      // 2. Info Block
+      const leftWidth = CONTENT_WIDTH * 0.61;
+      const rightWidth = CONTENT_WIDTH - leftWidth;
+      const row2Height = 80;
+
+      // Draw outer box for the info block
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - row2Height, width: CONTENT_WIDTH, height: row2Height, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawLine({ start: { x: MARGIN_LEFT + leftWidth, y }, end: { x: MARGIN_LEFT + leftWidth, y: y - row2Height }, thickness: 1, color: rgb(0, 0, 0) });
+
+      // Left Content
+      const leftPad = MARGIN_LEFT + 5;
+      page.drawText("TO,", { x: leftPad, y: y - 12, size: 9, font: font });
+      page.drawText(quote.customerName || '', { x: leftPad, y: y - 26, size: 10, font: boldFont });
+
+      let addrLines = (quote.customerAddress || "").split('\n');
+      let addrY = y - 40;
+      for (const line of addrLines) {
+        if (addrY < y - 75) break;
+        page.drawText(line.substring(0, 60), { x: leftPad, y: addrY, size: 9, font: font });
+        addrY -= 12;
       }
-      if (text) {
-        const textWidth = f.widthOfTextAtSize(text, size);
-        let textX = x + 3;
-        if (align === 'center') textX = x + (w - textWidth) / 2;
-        if (align === 'right') textX = x + w - textWidth - 3;
-        const textY = yPos - h / 2 - size / 3;
-        page.drawText(text, { x: textX, y: textY, size, font: f });
-      }
-    }
 
-    // 1. QUOTATION Title
-    const row1Height = 20;
-    drawGridCell("QUOTATION", MARGIN_LEFT, y, CONTENT_WIDTH, row1Height, boldFont, 12, 'center');
-    y -= row1Height;
+      // Right Content
+      const rightLabelW = rightWidth * 0.45;
+      const rightX = MARGIN_LEFT + leftWidth;
 
-    // 2. Info Block
-    const leftWidth = CONTENT_WIDTH * 0.61;
-    const rightWidth = CONTENT_WIDTH - leftWidth;
-    const row2Height = 80;
+      // (Horizontal and vertical separation lines removed as per user request)
+      const rightRowH = row2Height / 4;
 
-    // Draw outer box for the info block
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - row2Height, width: CONTENT_WIDTH, height: row2Height, borderColor: rgb(0,0,0), borderWidth: 1 });
-    page.drawLine({ start: { x: MARGIN_LEFT + leftWidth, y }, end: { x: MARGIN_LEFT + leftWidth, y: y - row2Height }, thickness: 1, color: rgb(0,0,0) });
+      const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
+      const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
 
-    // Left Content
-    const leftPad = MARGIN_LEFT + 5;
-    page.drawText("TO,", { x: leftPad, y: y - 12, size: 9, font: font });
-    page.drawText(quote.customerName || '', { x: leftPad, y: y - 26, size: 10, font: boldFont });
-    
-    let addrLines = (quote.customerAddress || "").split('\n');
-    let addrY = y - 40;
-    for (const line of addrLines) {
-      if (addrY < y - 75) break;
-      page.drawText(line.substring(0, 60), { x: leftPad, y: addrY, size: 9, font: font });
-      addrY -= 12;
-    }
-
-    // Right Content
-    const rightLabelW = rightWidth * 0.45;
-    const rightX = MARGIN_LEFT + leftWidth;
-    
-    // (Horizontal and vertical separation lines removed as per user request)
-    const rightRowH = row2Height / 4;
-
-    const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
-    const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
-
-    const drawRightCell = (label: string, val: string, index: number) => {
+      const drawRightCell = (label: string, val: string, index: number) => {
         const rowY = y - index * rightRowH;
         page.drawText(label, { x: rightX + 3, y: rowY - 13, size: 9, font: font });
         page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
-    }
+      }
 
-    drawRightCell("QTY NO.:", quote.quoteNumber, 0);
-    drawRightCell("QTN DATE:", qtnDate, 1);
-    drawRightCell("REF NO.:", quote.refNumber || "AS PER VISIT", 2);
-    drawRightCell("REF DATE.:", refDate, 3);
+      drawRightCell("QUOTATION NO. :", quote.quoteNumber, 0);
+      drawRightCell("DATE :", qtnDate, 1);
+      drawRightCell("REF NO. :", quote.refNumber || "AS PER VISIT", 2);
+      drawRightCell("REF DATE. :", refDate, 3);
 
-    y -= row2Height;
+      y -= row2Height;
 
-    // 3. KIND ATTN
-    const row3Height = 20;
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - row3Height, width: CONTENT_WIDTH, height: row3Height, borderColor: rgb(0,0,0), borderWidth: 1 });
-    page.drawText(`KIND ATTN- ${quote.contactPerson || ''}`, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
-    y -= row3Height;
+      // 3. KIND ATTN
+      const row3Height = 20;
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - row3Height, width: CONTENT_WIDTH, height: row3Height, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawText(`KIND ATTN : ${quote.contactPerson || ''}`, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
+      y -= row3Height;
 
-    // 4. Reference
-    const row4Height = 20;
-    drawGridCell("With Reference to your enquiry we are submitting our quotation as follows", MARGIN_LEFT, y, CONTENT_WIDTH, row4Height, font, 9, 'center');
-    y -= row4Height;
+      // 4. Reference
+      const row4Height = 20;
+      drawGridCell("With Reference to your enquiry we are submitting our quotation as follows", MARGIN_LEFT, y, CONTENT_WIDTH, row4Height, font, 9, 'center', false);
+      y -= row4Height;
 
-    // 5. Table Header
-    const headerHeight = 18;
-    const headers = ["SR NO.", "PART NO.", "DESCRIPTION", "QTY", "UNIT / PRICE", "NET PRICE", "DISCOUNT", "AMOUNT"];
-    const colWidths = [30, 80, 150, 30, 60, 60, 50, 60]; 
-    let curX = MARGIN_LEFT;
-    for (let i = 0; i < headers.length; i++) {
+      // 5. Table Header
+      const headerHeight = 18;
+      const headers = ["ITEM NO.", "DESCRIPTION", "MAKE", "DRG. NO.", "QTY", "PRICE", "DISC.", "NET PRICE", "TOTAL"];
+      const colWidths = [70, 135, 65, 50, 30, 55, 35, 55, 55]; // Sum is exactly 550
+      let curX = MARGIN_LEFT;
+      for (let i = 0; i < headers.length; i++) {
         drawGridCell(headers[i], curX, y, colWidths[i], headerHeight, boldFont, 8, 'center');
         curX += colWidths[i];
-    }
-    y -= headerHeight;
+      }
+      y -= headerHeight;
 
-    // 6. Table Body (Fixed grid)
-    const numRows = ITEMS_PER_PAGE;
-    const rowHeight = 18; // slightly smaller row height to fit everything nicely
-    const tableBodyHeight = numRows * rowHeight;
+      const numRows = ITEMS_PER_PAGE;
+      const rowHeight = 28; // Decreased from 32 to prevent terms box from overlapping footer
+      const tableBodyHeight = numRows * rowHeight;
 
-    // Draw outer rectangle for the whole table body and vertical column lines
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
-    let vertX = MARGIN_LEFT;
-    for (let j = 0; j < colWidths.length - 1; j++) {
+      // Draw outer rectangle for the whole table body and vertical column lines
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      let vertX = MARGIN_LEFT;
+      for (let j = 0; j < colWidths.length - 1; j++) {
         vertX += colWidths[j];
-        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0,0,0) });
-    }
-    
-    for (let i = 0; i < numRows; i++) {
+        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0, 0, 0) });
+      }
+
+      for (let i = 0; i < numRows; i++) {
         const item = currentChunk[i];
         let rowTexts = ["", "", "", "", "", "", "", ""];
-        
-        if (item) {
-            const itemDiscount = item.discount || 0;
-            const netPrice = item.price * (1 - itemDiscount / 100);
-            const amount = netPrice * item.quantity;
-            const itemIndex = pageIndex * 12 + i + 1;
 
-            rowTexts = [
-                itemIndex.toString(),
-                item.articleNumber || "",
-                item.name || "",
-                item.quantity.toString(),
-                formatIndianCurrency(item.price),
-                formatIndianCurrency(netPrice),
-                itemDiscount > 0 ? `${itemDiscount}%` : "",
-                formatIndianCurrency(amount)
-            ];
+        if (item) {
+          const itemDiscount = item.discount || 0;
+          const netPrice = item.price * (1 - itemDiscount / 100);
+          const amount = netPrice * item.quantity;
+          rowTexts = [
+            item.itemNumber || "",
+            item.name || "",
+            item.make ? item.make.toUpperCase() : "",
+            item.drgNumber || "",
+            item.quantity.toString(),
+            formatIndianCurrency(item.price),
+            itemDiscount > 0 ? `${itemDiscount}%` : "",
+            formatIndianCurrency(netPrice),
+            formatIndianCurrency(amount)
+          ];
         }
 
         let curRowX = MARGIN_LEFT;
         for (let j = 0; j < colWidths.length; j++) {
-            if (rowTexts[j]) {
-                const align = (j === 0 || j === 3 || j === 6) ? 'center' : (j >= 4 ? 'right' : 'left');
-                
-                let text = rowTexts[j];
-                if (j === 2 && font.widthOfTextAtSize(text, 9) > colWidths[j] - 6) {
-                    text = text.substring(0, 30) + '...';
+          if (rowTexts[j]) {
+            let align: 'left' | 'center' | 'right' = 'left';
+            if (j === 0 || j === 2 || j === 3 || j === 4 || j === 6) align = 'center';
+            if (j === 5 || j === 7 || j === 8) align = 'right';
+
+            const breakText = (str: string, maxW: number) => {
+              const res = [];
+              let cur = "";
+              for (let charIndex = 0; charIndex < str.length; charIndex++) {
+                if (font.widthOfTextAtSize(cur + str[charIndex], 9) > maxW) {
+                  const lastSpace = cur.lastIndexOf(' ');
+                  if (lastSpace > 0 && lastSpace > cur.length / 2) {
+                    res.push(cur.substring(0, lastSpace).trim());
+                    cur = cur.substring(lastSpace + 1) + str[charIndex];
+                  } else {
+                    res.push(cur.trim());
+                    cur = str[charIndex];
+                  }
+                } else {
+                  cur += str[charIndex];
                 }
-                
-                const tWidth = font.widthOfTextAtSize(text, 9);
-                let textX = curRowX + 3;
-                if (align === 'center') textX = curRowX + (colWidths[j] - tWidth) / 2;
-                if (align === 'right') textX = curRowX + colWidths[j] - tWidth - 3;
-                
-                page.drawText(text, { x: textX, y: y - 12, size: 9, font: font });
+              }
+              if (cur.trim()) res.push(cur.trim());
+              return res;
+            };
+
+            const lines = breakText(rowTexts[j], colWidths[j] - 6);
+
+            let textY = y - 12;
+            for (const l of lines) {
+              const tWidth = font.widthOfTextAtSize(l, 9);
+              let textX = curRowX + 3;
+              if (align === 'center') textX = curRowX + (colWidths[j] - tWidth) / 2;
+              if (align === 'right') textX = curRowX + colWidths[j] - tWidth - 3;
+
+              page.drawText(l, { x: textX, y: textY, size: 9, font: font });
+              textY -= 10; // offset for next line
             }
-            curRowX += colWidths[j];
+          }
+          curRowX += colWidths[j];
         }
         y -= rowHeight;
-    }
+      }
 
-    // 7. Bank Details & Totals
-    const bankBoxWidth = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4];
-    const totalsBoxWidth = CONTENT_WIDTH - bankBoxWidth;
-    const summaryHeight = 100;
-    
-    const isLastPage = pageIndex === chunks.length - 1;
-    
-    // Draw outer summary box
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - summaryHeight, width: CONTENT_WIDTH, height: summaryHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
-    page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0,0,0) });
+      // 7. Bank Details & Totals
+      const bankBoxWidth = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5];
+      const totalsBoxWidth = CONTENT_WIDTH - bankBoxWidth;
+      const summaryHeight = 60;
 
-    const bankPad = MARGIN_LEFT + 5;
-    page.drawText("BANK DETAILS", { x: bankPad, y: y - 12, size: 10, font: boldFont });
-    page.drawText(`BANK NAME-${settings?.bankName || 'ICICI BANK'}`, { x: bankPad, y: y - 28, size: 10, font: boldFont });
-    page.drawText(`ACCOUNT NO-${settings?.accountNumber || '145405004957'}`, { x: bankPad, y: y - 44, size: 10, font: boldFont });
-    page.drawText(`IFSC CODE-${settings?.ifscCode || 'ICIC0001454'}`, { x: bankPad, y: y - 60, size: 10, font: boldFont });
+      const isLastPage = pageIndex === chunks.length - 1;
 
-    page.drawLine({ start: { x: MARGIN_LEFT, y: y - 72 }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - 72 }, thickness: 1, color: rgb(0,0,0) });
-    const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
-    page.drawText(gstStr, { x: bankPad, y: y - 88, size: 12, font: boldFont });
+      // Draw outer summary box
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - summaryHeight, width: CONTENT_WIDTH, height: summaryHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
-    const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false) => {
+      const bankPad = MARGIN_LEFT + 5;
+      page.drawLine({ start: { x: MARGIN_LEFT, y: y - 40 }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - 40 }, thickness: 1, color: rgb(0, 0, 0) });
+      const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
+      page.drawText(gstStr, { x: bankPad, y: y - 54, size: 12, font: boldFont });
+
+      const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false, labelColor?: any) => {
         const f = isBold ? boldFont : font;
-        page.drawText(label, { x: MARGIN_LEFT + bankBoxWidth + 3, y: rowY - 14, size: 9, font: f });
+        const opts1: any = { x: MARGIN_LEFT + bankBoxWidth + 3, y: rowY - 14, size: 9, font: f };
+        if (labelColor) opts1.color = labelColor;
+        page.drawText(label, opts1);
+
         const w = f.widthOfTextAtSize(amountStr, 9);
-        page.drawText(amountStr, { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f });
-    };
+        const opts2: any = { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f };
+        page.drawText(amountStr, opts2);
+      };
 
-    if (isLastPage) {
-        const totalLabelW = totalsBoxWidth * 0.6;
-        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0,0,0) });
+      if (isLastPage) {
+        const totalLabelW = colWidths[6] + colWidths[7];
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
-        for (let i = 1; i < 5; i++) {
-            page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - i * 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - i * 20 }, thickness: 1, color: rgb(0,0,0) });
-        }
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - 20 }, thickness: 1, color: rgb(0, 0, 0) });
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - 40 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - 40 }, thickness: 1, color: rgb(0, 0, 0) });
 
         drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
-        drawTaxRow(y - 20, `CGST ${quote.cgst || 9}%`, formatIndianCurrency(cgstAmt));
-        drawTaxRow(y - 40, `SGST ${quote.sgst || 9}%`, formatIndianCurrency(sgstAmt));
-        drawTaxRow(y - 60, `IGST ${quote.igst || 0}%`, formatIndianCurrency(igstAmt));
-        drawTaxRow(y - 80, "TOTAL", formatIndianCurrency(grandTotal), true);
-    } else {
+        drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
+        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, rgb(1, 0, 0));
+      } else {
         const contText = "Continued on next page...";
-        page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10))/2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
-    }
-
-    y -= summaryHeight;
-
-    // Spacing
-    y -= 15;
-
-    // 8. Terms & Conditions
-    const termsHeight = 110;
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - termsHeight, width: CONTENT_WIDTH, height: termsHeight, borderColor: rgb(0,0,0), borderWidth: 1 });
-    page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - termsHeight }, thickness: 1, color: rgb(0,0,0) });
-    
-    // Left side terms header
-    page.drawRectangle({ x: MARGIN_LEFT, y: y - 20, width: bankBoxWidth, height: 20, borderColor: rgb(0,0,0), borderWidth: 1 });
-    page.drawText("TERMS & CONDITIONS", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: font });
-
-    let termsLines = (settings?.termsAndConditions || "").split('\n').filter(Boolean);
-    if (termsLines.length === 0) {
-      termsLines = [
-        "Order To Be Release on PHOENIX TOOLINGS.",
-        "Prices are net ex.works ch. Sambhaji Nagar, packing & forwarding extra.",
-        "Payment terms- 100% Advance along with Purchase order.",
-        "Delivery terms- 2 Week From The Date Of Order.",
-        "Validity Of Quotation- 30 Days"
-      ];
-    }
-
-    let termY = y - 20;
-    const termRowH = 90 / 5; // 18
-    for (let i = 0; i < 5; i++) {
-        // (Horizontal and vertical lines removed as per user request)
-
-        
-        page.drawText((i+1).toString(), { x: MARGIN_LEFT + 10, y: termY - 12, size: 9, font: font });
-        const termText = termsLines[i] || "";
-        page.drawText(termText.substring(0, 70), { x: MARGIN_LEFT + 30, y: termY - 12, size: 9, font: font });
-        
-        termY -= termRowH;
-    }
-
-    // Right side sign
-    const signX = MARGIN_LEFT + bankBoxWidth;
-    const forText = "FOR, ";
-    const companyNameText = settings?.companyName || 'PHOENIX TOOLINGS';
-    const forWidth = font.widthOfTextAtSize(forText, 10);
-    const companyWidth = boldFont.widthOfTextAtSize(companyNameText, 10);
-    const totalTitleWidth = forWidth + companyWidth;
-    
-    const titleStartX = signX + (totalsBoxWidth - totalTitleWidth) / 2;
-    page.drawText(forText, { x: titleStartX, y: y - 15, size: 10, font: font });
-    page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 15, size: 10, font: boldFont });
-    
-    // Embed stamp image
-    try {
-      const stampPath = path.join(process.cwd(), 'public', 'company-stamp.jpg');
-      if (fs.existsSync(stampPath)) {
-        const stampBytes = fs.readFileSync(stampPath);
-        const stampImage = await pdfDoc.embedJpg(stampBytes);
-        const stampDims = stampImage.scaleToFit(130, 65);
-        const stampDrawX = signX + totalsBoxWidth - stampDims.width - 5;
-        const stampDrawY = y - termsHeight + 22;
-        page.drawImage(stampImage, {
-          x: stampDrawX,
-          y: stampDrawY,
-          width: stampDims.width,
-          height: stampDims.height,
-        });
+        page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
       }
-    } catch (e) {
-      console.error('Failed to embed stamp image:', e);
-    }
 
-    page.drawLine({ start: { x: signX, y: y - termsHeight + 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - termsHeight + 20 }, thickness: 1, color: rgb(0,0,0) });
-    const signText = "Authorised Signatory";
-    page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10))/2, y: y - termsHeight + 6, size: 10, font: font });
+      y -= summaryHeight;
 
-    y -= termsHeight;
+      // Spacing
+      y -= 15;
 
-    // 9. Footer Text
-    y -= 15;
-    const fText1 = "This is a system generated Quotation";
-    const fText2 = "SUBJECTED TO CH. SAMBHAJI NAGAR JURISDICTION";
-    page.drawText(fText1, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText1, 8))/2, y, size: 8, font: font });
-    page.drawText(fText2, { x: MARGIN_LEFT + (CONTENT_WIDTH - font.widthOfTextAtSize(fText2, 8))/2, y: y - 12, size: 8, font: font });
+      // 8. Terms & Conditions
+      const termsHeight = 140;
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - termsHeight, width: CONTENT_WIDTH, height: termsHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - termsHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
-    // 10. Authorized Channel Partners
-    y -= 35;
-    
-    const titleStr = "AUTHORIZED CHANNEL PARTNER";
-    page.drawText(titleStr, { x: MARGIN_LEFT, y, size: 9, font: boldFont });
-    page.drawLine({ start: { x: MARGIN_LEFT, y: y - 2 }, end: { x: MARGIN_LEFT + boldFont.widthOfTextAtSize(titleStr, 9), y: y - 2 }, thickness: 1, color: rgb(0,0,0) });
-    y -= 10;
+      // Left side terms header
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - 20, width: bankBoxWidth, height: 20, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawText("Terms and Condition :", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: boldFont });
 
-    if (partnersImage) {
+      const defaultTerms = [
+        { label: "1) GST", value: ": 18%" },
+        { label: "2) Delivery", value: ": Two Weeks from the date of receipt of purchase order" },
+        { label: "3) Payment", value: ": 100% Against Proforma" },
+        { label: "4) Validity", value: ": 1 Week" },
+        { label: "5) P & F Extra", value: ": NA" },
+        { label: "6) Insurance", value: ": At your end" },
+        { label: "7) Note", value: ": 18% interest will be charged on the value of invoice, If not paid within 30 days from the date of invoice." },
+      ];
+
+      let structuredTerms: { label: string; value: string }[] = [];
+      const rawTerms = (settings?.termsAndConditions || "").split('\n').filter(Boolean);
+      for (const line of rawTerms) {
+        const match = line.match(/^(\d+\)\s*[^:]+)\s*:\s*(.*)$/);
+        if (match) {
+          structuredTerms.push({ label: match[1].trim(), value: ": " + match[2].trim() });
+        }
+      }
+      if (structuredTerms.length === 0) {
+        structuredTerms = defaultTerms;
+      }
+
+      const termLabelX = MARGIN_LEFT + 5;
+      const termValueX = MARGIN_LEFT + 105;
+      let termY = y - 20;
+      const termRowH = 15;
+      for (const term of structuredTerms) {
+        page.drawText(term.label, { x: termLabelX, y: termY - 12, size: 9, font: boldFont, color: labelColor });
+        // Check if value needs to wrap
+        const maxValueWidth = bankBoxWidth - 115;
+        if (font.widthOfTextAtSize(term.value, 9) > maxValueWidth) {
+          const colonOffset = font.widthOfTextAtSize(": ", 9);
+          let line1 = "";
+          for (let c = 0; c < term.value.length; c++) {
+            if (font.widthOfTextAtSize(line1 + term.value[c], 9) > maxValueWidth) {
+              const lastSpace = line1.lastIndexOf(' ');
+              if (lastSpace > 0) {
+                page.drawText(line1.substring(0, lastSpace), { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(line1.substring(lastSpace + 1) + term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              } else {
+                page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              }
+              break;
+            }
+            line1 += term.value[c];
+            if (c === term.value.length - 1) {
+              page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+            }
+          }
+        } else {
+          page.drawText(term.value, { x: termValueX, y: termY - 12, size: 9, font: font });
+        }
+        termY -= termRowH;
+      }
+
+      // Right side sign
+      const signX = MARGIN_LEFT + bankBoxWidth;
+      const forText = "FOR, ";
+      const companyNameText = settings?.companyName || 'PHOENIX TOOLINGS';
+      const forWidth = font.widthOfTextAtSize(forText, 10);
+      const companyWidth = boldFont.widthOfTextAtSize(companyNameText, 10);
+      const totalTitleWidth = forWidth + companyWidth;
+
+      const titleStartX = signX + (totalsBoxWidth - totalTitleWidth) / 2;
+      page.drawText(forText, { x: titleStartX, y: y - 15, size: 10, font: font });
+      page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 15, size: 10, font: boldFont });
+
+      // Embed stamp image
+      try {
+        const stampPath = path.join(process.cwd(), 'public', 'company-stamp.jpg');
+        if (fs.existsSync(stampPath)) {
+          const stampBytes = fs.readFileSync(stampPath);
+          const stampImage = await pdfDoc.embedJpg(stampBytes);
+          const stampDims = stampImage.scaleToFit(130, 65);
+          const stampDrawX = signX + totalsBoxWidth - stampDims.width - 5;
+          const stampDrawY = y - termsHeight + 22;
+          page.drawImage(stampImage, {
+            x: stampDrawX,
+            y: stampDrawY,
+            width: stampDims.width,
+            height: stampDims.height,
+          });
+        }
+      } catch (e) {
+        console.error('Failed to embed stamp image:', e);
+      }
+
+      page.drawLine({ start: { x: signX, y: y - termsHeight + 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - termsHeight + 20 }, thickness: 1, color: rgb(0, 0, 0) });
+      const signText = "Authorised Signatory";
+      page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10)) / 2, y: y - termsHeight + 6, size: 10, font: font });
+
+      y -= termsHeight;
+
+      // 9. Hope Text
+      y -= 15;
+      const hopeText = "We hope you find the above quotation attractive and look forward to receiving your valuable order.";
+      page.drawText(hopeText, {
+        x: MARGIN_LEFT + (CONTENT_WIDTH - boldFont.widthOfTextAtSize(hopeText, 9)) / 2,
+        y: y,
+        size: 9,
+        font: boldFont
+      });
+
+      // 10. Authorized Channel Partners
+      y -= 35;
+
+      const titleStr = "AUTHORIZED CHANNEL PARTNER";
+      page.drawText(titleStr, { x: MARGIN_LEFT, y, size: 9, font: boldFont });
+      page.drawLine({ start: { x: MARGIN_LEFT, y: y - 2 }, end: { x: MARGIN_LEFT + boldFont.widthOfTextAtSize(titleStr, 9), y: y - 2 }, thickness: 1, color: rgb(0, 0, 0) });
+      y -= 10;
+
+      if (partnersImage) {
         const pDims = partnersImage.scaleToFit(CONTENT_WIDTH, 35);
         page.drawImage(partnersImage, {
-            x: MARGIN_LEFT,
-            y: y - pDims.height,
-            width: pDims.width,
-            height: pDims.height,
+          x: MARGIN_LEFT,
+          y: y - pDims.height,
+          width: pDims.width,
+          height: pDims.height,
         });
-    } else {
+      } else {
         const partnersText = "ISCAR   |   CTC PRECISION   |   REGO-FIX   |   HNTI OIL   |   ADDISON";
         page.drawText(partnersText, { x: MARGIN_LEFT, y: y - 10, size: 10, font: boldFont });
-    }
+      }
 
     } // End of page loop
 

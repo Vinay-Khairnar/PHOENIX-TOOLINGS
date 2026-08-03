@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { FileText, ArrowRight, Plus } from 'lucide-react';
 import { DeleteQuoteButton } from './DeleteQuoteButton';
+import { DeleteAllQuotesButton } from './DeleteAllQuotesButton';
 import { formatCurrency } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -25,13 +26,15 @@ export default async function QuotesPage() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Quotations</h1>
           <p className="text-sm text-slate-500 mt-1">Your quotation history</p>
         </div>
-        
-        <Link 
-          href="/quotes/new"
-          className="bg-indigo-600 text-white rounded-xl py-2 px-5 font-medium text-sm shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-colors flex items-center gap-2 active:scale-95 w-fit"
-        >
-          <Plus className="w-4 h-4" /> Create Quote
-        </Link>
+        <div className="flex items-center gap-3">
+          <DeleteAllQuotesButton hasQuotes={quotes.length > 0} />
+          <Link 
+            href="/quotes/new"
+            className="bg-indigo-600 text-white rounded-xl py-2 px-5 font-medium text-sm shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-colors flex items-center gap-2 active:scale-95 w-fit"
+          >
+            <Plus className="w-4 h-4" /> Create Quote
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 relative">
