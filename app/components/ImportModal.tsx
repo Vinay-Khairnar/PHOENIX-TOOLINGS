@@ -9,12 +9,12 @@ interface ImportModalProps {
 }
 
 const MAKE_OPTIONS = [
-  'phoenix',
-  'Isacr',
-  'Ctc precision',
+  'PHOENIX',
+  'ISCAR',
+  'CTC PRECISION',
   'HNTI OIL',
-  'Rego fix',
-  'addision'
+  'REGO-FIX',
+  'ADDISON'
 ];
 
 export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
@@ -52,7 +52,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     const loadingToast = toast.loading('Importing products...');
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('make', selectedMake);
+    formData.append('make', selectedMake.toUpperCase());
 
     try {
       const res = await fetch('/api/products/import', {
@@ -105,7 +105,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                 <option value="" disabled>Select Make</option>
                 {MAKE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
-                    {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    {opt}
                   </option>
                 ))}
               </select>

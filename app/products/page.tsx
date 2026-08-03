@@ -208,7 +208,7 @@ export default function ProductsPage() {
                     <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
                       <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Make</span>
                       <span className="text-slate-600 font-medium">
-                        {product.make ? product.make.charAt(0).toUpperCase() + product.make.slice(1) : '-'}
+                        {product.make ? product.make.toUpperCase() : '-'}
                       </span>
                     </td>
                     <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-start sm:items-center sm:table-cell border-b sm:border-0 border-slate-50 flex-col sm:flex-row gap-1 sm:gap-0">

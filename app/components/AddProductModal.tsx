@@ -9,12 +9,12 @@ interface AddProductModalProps {
 }
 
 const MAKE_OPTIONS = [
-  'phoenix',
-  'Isacr',
-  'Ctc precision',
+  'PHOENIX',
+  'ISCAR',
+  'CTC PRECISION',
   'HNTI OIL',
-  'Rego fix',
-  'addision'
+  'REGO-FIX',
+  'ADDISON'
 ];
 
 export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalProps) {
@@ -42,7 +42,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
         body: JSON.stringify({
           name: name.trim(),
           itemNumber: itemNumber.trim() || null,
-          make,
+          make: make.toUpperCase(),
           price: parseFloat(price)
         }),
       });
@@ -138,7 +138,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
                 <option value="" disabled>Select Make</option>
                 {MAKE_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
-                    {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                    {opt}
                   </option>
                 ))}
               </select>

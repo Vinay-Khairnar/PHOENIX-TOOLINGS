@@ -114,7 +114,7 @@ export async function POST(request: Request) {
       quantity: item.quantity,
       discount: item.discount || 0,
       itemNumber: item.itemNumber || null,
-      make: item.make || null,
+      make: item.make ? item.make.toUpperCase() : null,
       drgNumber: item.drgNumber || null,
     }));
 

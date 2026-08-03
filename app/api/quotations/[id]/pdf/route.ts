@@ -180,9 +180,10 @@ export async function GET(
       const infoFontSize = 8;
       let infoY = A4_HEIGHT - 55;
       const infoStartX = MARGIN_LEFT + 15;
+      const labelColor = rgb(1, 0, 0);
       for (const line of infoLines) {
-        const labelWidth = font.widthOfTextAtSize(line.label, infoFontSize);
-        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: font });
+        const labelWidth = boldFont.widthOfTextAtSize(line.label, infoFontSize);
+        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
         page.drawText(line.value, { x: infoStartX + labelWidth, y: infoY, size: infoFontSize, font: boldFont });
         infoY -= 12;
       }
@@ -277,7 +278,7 @@ export async function GET(
           rowTexts = [
             item.itemNumber || "",
             item.name || "",
-            item.make || "",
+            item.make ? item.make.toUpperCase() : "",
             item.drgNumber || "",
             item.quantity.toString(),
             formatIndianCurrency(item.price),
@@ -349,11 +350,15 @@ export async function GET(
       const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
       page.drawText(gstStr, { x: bankPad, y: y - 54, size: 12, font: boldFont });
 
-      const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false) => {
+      const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false, labelColor?: any) => {
         const f = isBold ? boldFont : font;
-        page.drawText(label, { x: MARGIN_LEFT + bankBoxWidth + 3, y: rowY - 14, size: 9, font: f });
+        const opts1: any = { x: MARGIN_LEFT + bankBoxWidth + 3, y: rowY - 14, size: 9, font: f };
+        if (labelColor) opts1.color = labelColor;
+        page.drawText(label, opts1);
+
         const w = f.widthOfTextAtSize(amountStr, 9);
-        page.drawText(amountStr, { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f });
+        const opts2: any = { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f };
+        page.drawText(amountStr, opts2);
       };
 
       if (isLastPage) {
@@ -365,7 +370,7 @@ export async function GET(
 
         drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
         drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
-        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true);
+        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, rgb(1, 0, 0));
       } else {
         const contText = "Continued on next page...";
         page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
@@ -412,7 +417,7 @@ export async function GET(
       let termY = y - 20;
       const termRowH = 15;
       for (const term of structuredTerms) {
-        page.drawText(term.label, { x: termLabelX, y: termY - 12, size: 9, font: boldFont });
+        page.drawText(term.label, { x: termLabelX, y: termY - 12, size: 9, font: boldFont, color: labelColor });
         // Check if value needs to wrap
         const maxValueWidth = bankBoxWidth - 115;
         if (font.widthOfTextAtSize(term.value, 9) > maxValueWidth) {

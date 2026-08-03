@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       itemNumber: data.itemNumber || null,
       price: parseFloat(data.price),
       description: data.description || null,
-      make: data.make,
+      make: data.make ? data.make.toUpperCase() : null,
     }).select().single();
     
     if (error) throw error;

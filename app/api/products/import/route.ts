@@ -282,7 +282,7 @@ export async function POST(request: Request) {
     // Products will now be appended. Users can use the 'Delete All' button in the UI if they want to wipe the list before importing.
 
     if (make) {
-      validItems = validItems.map(item => ({ ...item, make }));
+      validItems = validItems.map(item => ({ ...item, make: make.toUpperCase() }));
     }
 
     // Insert in batches of 1000

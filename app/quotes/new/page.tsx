@@ -397,7 +397,7 @@ export default function Home() {
                       <div className="font-semibold text-[14px]">{item.name}</div>
                       <div className="text-[12px] text-[#7a7a7a]">
                         {[
-                          item.make ? `Make: ${item.make}` : null,
+                          item.make ? `Make: ${item.make.toUpperCase()}` : null,
                           item.itemNumber ? `Item No: ${item.itemNumber}` : null,
                           formatCurrency(item.price)
                         ].filter(Boolean).join(' | ')}
