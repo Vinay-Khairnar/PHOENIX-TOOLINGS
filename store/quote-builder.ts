@@ -6,7 +6,9 @@ export interface QuoteBuilderItem {
   price: number;
   quantity: number;
   discount: number;
-  articleNumber: string | null;
+  itemNumber: string | null;
+  make?: string | null;
+  drgNumber?: string | null;
 }
 
 interface QuoteBuilderState {
@@ -48,6 +50,7 @@ interface QuoteBuilderState {
   addItem: (item: QuoteBuilderItem) => void;
   updateItemQuantity: (productId: string, quantity: number) => void;
   updateItemDiscount: (productId: string, discount: number) => void;
+  updateItemDrgNumber: (productId: string, drgNumber: string) => void;
   removeItem: (productId: string) => void;
   setDiscount: (discount: number) => void;
   fillCustomer: (customer: { name: string; email?: string | null; phone?: string | null; address?: string | null }) => void;
@@ -111,6 +114,12 @@ export const useQuoteBuilder = create<QuoteBuilderState>((set) => ({
     set((state) => ({
       items: state.items.map((i) =>
         i.productId === productId ? { ...i, discount } : i
+      ),
+    })),
+  updateItemDrgNumber: (productId, drgNumber) =>
+    set((state) => ({
+      items: state.items.map((i) =>
+        i.productId === productId ? { ...i, drgNumber } : i
       ),
     })),
   removeItem: (productId) =>

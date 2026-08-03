@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
 
-interface Product { id: string; name: string; articleNumber: string | null; price: number; }
+interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; }
 interface Customer { id: string; name: string; email: string | null; phone: string | null; address: string | null; contactPerson: string | null; }
 
 export default function Home() {
@@ -33,7 +33,7 @@ export default function Home() {
     cgst, setCgst,
     sgst, setSgst,
     igst, setIgst,
-    items, addItem, updateItemQuantity, updateItemDiscount, removeItem, 
+    items, addItem, updateItemQuantity, updateItemDiscount, updateItemDrgNumber, removeItem, 
     discount, setDiscount,
     reset 
   } = useQuoteBuilder();
@@ -327,43 +327,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Tax Settings */}
-        <section className="bg-white border border-[#e0e0e0] rounded-[18px] p-6 shadow-sm">
-          <h2 className="text-[20px] font-semibold tracking-tight mb-5">Tax Settings</h2>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">CGST %</label>
-              <input 
-                type="number"
-                min="0" max="100" step="0.5"
-                className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
-                value={cgst}
-                onChange={(e) => setCgst(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">SGST %</label>
-              <input 
-                type="number"
-                min="0" max="100" step="0.5"
-                className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
-                value={sgst}
-                onChange={(e) => setSgst(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">IGST %</label>
-              <input 
-                type="number"
-                min="0" max="100" step="0.5"
-                className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
-                value={igst}
-                onChange={(e) => setIgst(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-          </div>
-          <p className="text-[12px] text-[#999] mt-2">For same state: CGST + SGST. For interstate: use IGST only (set CGST & SGST to 0).</p>
-        </section>
+
 
       </div>
 
@@ -379,7 +343,7 @@ export default function Home() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7a7a7a] w-5 h-5 group-focus-within:text-[#0066cc] transition-colors" />
             <input 
               type="text" 
-              placeholder="Search by description or part no..." 
+              placeholder="Search by description or item no..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[12px] py-3.5 pl-12 pr-4 text-[15px] outline-none focus:ring-4 focus:ring-[#0066cc]/10 focus:border-[#0066cc] focus:bg-white transition-all shadow-sm"
@@ -390,16 +354,16 @@ export default function Home() {
             <div className="absolute top-[110px] left-0 right-0 mx-6 bg-white border border-[#e0e0e0] rounded-[12px] overflow-hidden max-h-[350px] overflow-y-auto shadow-[0_10px_40px_rgba(0,0,0,0.1)] divide-y divide-[#f0f0f0] z-50">
               {searchResults.map(product => (
                 <div key={product.id} className="flex items-center justify-between p-4 hover:bg-[#fafafc] transition-colors group/item cursor-pointer" onClick={() => {
-                  addItem({ productId: product.id, name: product.name, price: product.price, quantity: 1, discount: 0, articleNumber: product.articleNumber });
+                  addItem({ productId: product.id, name: product.name, price: product.price, quantity: 1, discount: 0, itemNumber: product.itemNumber, make: product.make });
                   setSearchQuery('');
                   setSearchResults([]);
                 }}>
                   <div className="flex flex-col gap-1">
                     <div className="font-semibold text-[14px] tracking-tight text-[#111] leading-tight">{product.name}</div>
                     <div className="text-[13px] text-[#7a7a7a] flex items-center gap-2 mt-1">
-                      {product.articleNumber && (
+                      {product.itemNumber && (
                         <span className="inline-flex items-center bg-[#f0f0f0] border border-[#e5e5e5] px-1.5 py-0.5 rounded-[4px] text-[10px] font-bold tracking-wider text-[#555]">
-                          {product.articleNumber}
+                          {product.itemNumber}
                         </span>
                       )}
                       <span className="font-semibold text-[#333]">{formatCurrency(product.price)}</span>
@@ -433,7 +397,8 @@ export default function Home() {
                       <div className="font-semibold text-[14px]">{item.name}</div>
                       <div className="text-[12px] text-[#7a7a7a]">
                         {[
-                          item.articleNumber ? `Part No: ${item.articleNumber}` : null,
+                          item.make ? `Make: ${item.make}` : null,
+                          item.itemNumber ? `Item No: ${item.itemNumber}` : null,
                           formatCurrency(item.price)
                         ].filter(Boolean).join(' | ')}
                       </div>
@@ -442,19 +407,19 @@ export default function Home() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex items-center justify-between text-[13px] border-t border-[#f0f0f0] pt-2">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[#7a7a7a]">Qty:</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[13px] border-t border-slate-100 pt-3 mt-1 items-end">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Quantity</label>
                       <input 
                         type="number" 
                         min="1" 
                         value={item.quantity}
                         onChange={(e) => updateItemQuantity(item.productId, Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-16 bg-[#f5f5f7] border border-[#e0e0e0] rounded-[5px] p-1 text-center"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[#7a7a7a]">Disc %:</label>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Discount %</label>
                       <input 
                         type="number" 
                         min="0" max="100"
@@ -464,11 +429,28 @@ export default function Home() {
                           val = Math.max(0, Math.min(100, val));
                           updateItemDiscount(item.productId, val);
                         }}
-                        className="w-16 bg-[#f5f5f7] border border-[#e0e0e0] rounded-[5px] p-1 text-center"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
-                    <div className="font-medium text-right">
-                      {formatCurrency(item.price * item.quantity * (1 - (item.discount || 0) / 100))}
+                    {item.make?.toLowerCase() === 'phoenix' ? (
+                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
+                        <label className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Drg No.</label>
+                        <input 
+                          type="text" 
+                          value={item.drgNumber || ''}
+                          onChange={(e) => updateItemDrgNumber(item.productId, e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                          placeholder="Drawing"
+                        />
+                      </div>
+                    ) : (
+                      <div className="hidden sm:block"></div>
+                    )}
+                    <div className="flex flex-col justify-end sm:items-end col-span-2 sm:col-span-1 pb-1.5 text-right">
+                      <span className="text-slate-400 font-medium text-[11px] uppercase tracking-wider sm:hidden mb-1 text-left">Total Price</span>
+                      <div className="font-bold text-slate-900 text-[15px]">
+                        {formatCurrency(item.price * item.quantity * (1 - (item.discount || 0) / 100))}
+                      </div>
                     </div>
                   </div>
                 </div>

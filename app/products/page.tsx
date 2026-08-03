@@ -4,14 +4,18 @@ import { useState, useEffect } from 'react';
 import { Upload, PackageSearch, Trash2, Search, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
+import ImportModal from '@/app/components/ImportModal';
+import AddProductModal from '@/app/components/AddProductModal';
+import { Plus } from 'lucide-react';
 
-interface Product { id: string; name: string; articleNumber: string | null; price: number; }
+interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [search, setSearch] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -87,30 +91,8 @@ export default function ProductsPage() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const loadingToast = toast.loading('Importing products...');
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch('/api/products/import', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      toast.success('Products imported successfully!', { id: loadingToast });
-      fetchProducts(search, page);
-    } catch (error) {
-      console.error(error);
-      toast.error('Error importing products.', { id: loadingToast });
-    } finally {
-      setIsUploading(false);
-      e.target.value = '';
-    }
+  const handleImportSuccess = () => {
+    fetchProducts(search, page);
   };
 
   return (
@@ -134,16 +116,32 @@ export default function ProductsPage() {
               )}
             </button>
           )}
-          <label className={`flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm shadow-indigo-200 cursor-pointer flex-1 sm:flex-none ${isUploading ? 'opacity-70 pointer-events-none' : ''}`}>
-            {isUploading ? (
-              <><Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" /> Importing...</>
-            ) : (
-              <><Upload className="w-5 h-5 sm:w-4 sm:h-4" /> Import Excel/CSV/PDF</>
-            )}
-            <input type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
-          </label>
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm w-full sm:w-auto h-[44px] sm:h-[40px]"
+          >
+            <Plus className="w-5 h-5 sm:w-4 sm:h-4" /> Add Product
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm shadow-indigo-200 w-full sm:w-auto h-[44px] sm:h-[40px]"
+          >
+            <Upload className="w-5 h-5 sm:w-4 sm:h-4" /> Import Excel/CSV/PDF
+          </button>
         </div>
       </div>
+
+      <ImportModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
+      
+      <AddProductModal 
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
 
       <div className="bg-transparent sm:bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-slate-200 overflow-hidden">
         <div className="p-0 pb-4 sm:p-4 sm:border-b sm:border-slate-100 sm:bg-slate-50/50">
@@ -151,7 +149,7 @@ export default function ProductsPage() {
             <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search products by description or part no..." 
+              placeholder="Search products by description or item no..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-3 sm:py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm sm:shadow-none"
@@ -164,8 +162,9 @@ export default function ProductsPage() {
             <thead className="bg-slate-50/80 text-slate-500 font-medium hidden sm:table-header-group">
               <tr>
                 <th className="px-6 py-4 w-20 whitespace-nowrap">Sr. No.</th>
-                <th className="px-6 py-4 w-1/4">Part No.</th>
-                <th className="px-6 py-4 w-2/4">Description</th>
+                <th className="px-6 py-4 w-1/5">Item No.</th>
+                <th className="px-6 py-4 w-1/5">Make</th>
+                <th className="px-6 py-4 w-2/5">Description</th>
                 <th className="px-6 py-4 w-1/6 text-right">Price</th>
                 <th className="px-6 py-4 w-1/12 text-right">Actions</th>
               </tr>
@@ -173,7 +172,7 @@ export default function ProductsPage() {
             <tbody className="divide-y-0 sm:divide-y divide-slate-100 block sm:table-row-group">
               {isLoading ? (
                 <tr className="block sm:table-row">
-                  <td colSpan={5} className="px-6 py-12 text-center block sm:table-cell">
+                  <td colSpan={6} className="px-6 py-12 text-center block sm:table-cell">
                     <Loader2 className="w-8 h-8 mx-auto animate-spin text-indigo-600 mb-4" />
                     <h3 className="text-slate-900 font-medium text-base mb-1">Loading products...</h3>
                     <p className="text-slate-500 text-sm">Please wait while we fetch your catalog.</p>
@@ -181,7 +180,7 @@ export default function ProductsPage() {
                 </tr>
               ) : products.length === 0 ? (
                 <tr className="block sm:table-row">
-                  <td colSpan={5} className="px-6 py-12 text-center block sm:table-cell">
+                  <td colSpan={6} className="px-6 py-12 text-center block sm:table-cell">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 mb-4">
                       <PackageSearch className="w-8 h-8 text-slate-400" />
                     </div>
@@ -199,12 +198,18 @@ export default function ProductsPage() {
                       </span>
                     </td>
                     <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
-                      <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Part No.</span>
-                      {product.articleNumber ? (
+                      <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Item No.</span>
+                      {product.itemNumber ? (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-white transition-colors">
-                          {product.articleNumber}
+                          {product.itemNumber}
                         </span>
                       ) : '-'}
+                    </td>
+                    <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
+                      <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Make</span>
+                      <span className="text-slate-600 font-medium">
+                        {product.make ? product.make.charAt(0).toUpperCase() + product.make.slice(1) : '-'}
+                      </span>
                     </td>
                     <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-start sm:items-center sm:table-cell border-b sm:border-0 border-slate-50 flex-col sm:flex-row gap-1 sm:gap-0">
                       <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</span>

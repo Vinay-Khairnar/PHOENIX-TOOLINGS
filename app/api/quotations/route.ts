@@ -113,7 +113,9 @@ export async function POST(request: Request) {
       price: item.price,
       quantity: item.quantity,
       discount: item.discount || 0,
-      articleNumber: item.articleNumber || null,
+      itemNumber: item.itemNumber || null,
+      make: item.make || null,
+      drgNumber: item.drgNumber || null,
     }));
 
     const { error: itemsError } = await supabase

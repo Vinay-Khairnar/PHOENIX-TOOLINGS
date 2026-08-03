@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     let query = supabase.from('Product').select('*', { count: 'exact' });
     
     if (search) {
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,articleNumber.ilike.%${search}%`);
+      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,itemNumber.ilike.%${search}%`);
     }
 
     const { data: products, count: totalCount, error } = await query
@@ -36,12 +36,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
+    
+    if (!data.make) {
+      return NextResponse.json({ error: 'Make is required' }, { status: 400 });
+    }
+
     const { data: product, error } = await supabase.from('Product').insert({
       name: data.name,
       sku: data.sku || null,
-      articleNumber: data.articleNumber || null,
+      itemNumber: data.itemNumber || null,
       price: parseFloat(data.price),
       description: data.description || null,
+      make: data.make,
     }).select().single();
     
     if (error) throw error;
