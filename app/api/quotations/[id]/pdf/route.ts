@@ -227,8 +227,8 @@ export async function GET(
         boldFont.widthOfTextAtSize(emailText, infoFontSize)
       );
 
-      const colonX = infoStartX + maxLabelTextWidth + 3;
-      const valueX = colonX + boldFont.widthOfTextAtSize(":", infoFontSize) + 5;
+      const colonX = infoStartX + maxLabelTextWidth + 8;
+      const valueX = colonX + boldFont.widthOfTextAtSize(":", infoFontSize) + 8;
 
       // Draw WORKS
       page.drawText(worksText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
@@ -286,16 +286,24 @@ export async function GET(
       const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
       const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
 
+      const rightLabels = ["QUOTATION NO.", "DATE", "REF NO.", "REF DATE."];
+      const maxRightLabelWidth = Math.max(...rightLabels.map((l: string) => font.widthOfTextAtSize(l, 9)));
+      const rightColonX = rightX + 3 + maxRightLabelWidth + 8;
+      const rightValueX = rightColonX + font.widthOfTextAtSize(":", 9) + 12;
+
       const drawRightCell = (label: string, val: string, index: number) => {
         const rowY = y - index * rightRowH;
         page.drawText(label, { x: rightX + 3, y: rowY - 13, size: 9, font: font });
-        page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
+        page.drawText(":", { x: rightColonX, y: rowY - 13, size: 9, font: font });
+        if (val) {
+          page.drawText(val, { x: rightValueX, y: rowY - 13, size: 9, font: font });
+        }
       }
 
-      drawRightCell("QUOTATION NO. :", quote.quoteNumber, 0);
-      drawRightCell("DATE :", qtnDate, 1);
-      drawRightCell("REF NO. :", quote.refNumber || "AS PER VISIT", 2);
-      drawRightCell("REF DATE. :", refDate, 3);
+      drawRightCell("QUOTATION NO.", quote.quoteNumber, 0);
+      drawRightCell("DATE", qtnDate, 1);
+      drawRightCell("REF NO.", quote.refNumber || "AS PER VISIT", 2);
+      drawRightCell("REF DATE.", refDate, 3);
 
       y -= row2Height;
 
