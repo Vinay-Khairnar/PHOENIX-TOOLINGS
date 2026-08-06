@@ -180,21 +180,79 @@ export async function GET(
       });
 
       // Company info lines below QUOTATION title
-      const infoLines = [
-        { label: "WORKS : ", value: "A-51 MIDC WALUJ,  AURANGABAD - 431 136, MAHARASTRA, INDIA." },
-        { label: "CALL : ", value: "+91 9890448625 / +91 9766791555" },
-        { label: "E-mail : ", value: "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com" },
-      ];
+      const rawAddress = (settings?.address || "A-51 MIDC WALUJ, AURANGABAD - 431 136, MAHARASTRA, INDIA.").toUpperCase();
+      let addressLines: string[] = [];
+      if (rawAddress.includes('\n')) {
+        addressLines = rawAddress.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      } else {
+        const commaParts = rawAddress.split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (commaParts.length >= 2) {
+          let line1 = commaParts[0];
+          let splitIdx = 1;
+          for (let i = 1; i < commaParts.length - 1; i++) {
+            if ((line1 + ", " + commaParts[i]).length <= 40) {
+              line1 += ", " + commaParts[i];
+              splitIdx = i + 1;
+            } else {
+              break;
+            }
+          }
+          addressLines = [
+            line1 + ",",
+            commaParts.slice(splitIdx).join(', ')
+          ];
+        } else {
+          const words = rawAddress.split(' ');
+          const mid = Math.ceil(words.length / 2);
+          addressLines = [
+            words.slice(0, mid).join(' '),
+            words.slice(mid).join(' ')
+          ];
+        }
+      }
+
       const infoFontSize = 8;
-      let infoY = A4_HEIGHT - 55;
+      let infoY = A4_HEIGHT - 60;
       const infoStartX = MARGIN_LEFT + 15;
       const labelColor = hexColor('#D51947');
-      for (const line of infoLines) {
-        const labelWidth = boldFont.widthOfTextAtSize(line.label, infoFontSize);
-        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
-        page.drawText(line.value, { x: infoStartX + labelWidth, y: infoY, size: infoFontSize, font: boldFont });
+
+      // Separate labels, colons, and values into aligned columns
+      const worksText = "WORKS";
+      const callText = "CALL";
+      const emailText = "E-mail";
+
+      const maxLabelTextWidth = Math.max(
+        boldFont.widthOfTextAtSize(worksText, infoFontSize),
+        boldFont.widthOfTextAtSize(callText, infoFontSize),
+        boldFont.widthOfTextAtSize(emailText, infoFontSize)
+      );
+
+      const colonX = infoStartX + maxLabelTextWidth + 3;
+      const valueX = colonX + boldFont.widthOfTextAtSize(":", infoFontSize) + 5;
+
+      // Draw WORKS
+      page.drawText(worksText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(addressLines[0] || '', { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      infoY -= 12;
+
+      for (let i = 1; i < addressLines.length; i++) {
+        page.drawText(addressLines[i], { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
         infoY -= 12;
       }
+
+      // Draw CALL
+      const callValue = settings?.phone || "+91 9890448625 / +91 9766791555";
+      page.drawText(callText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(callValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      infoY -= 12;
+
+      // Draw E-mail
+      const emailValue = settings?.email || "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com";
+      page.drawText(emailText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
 
       // 2. Info Block
       const leftWidth = CONTENT_WIDTH * 0.61;
@@ -354,9 +412,8 @@ export async function GET(
       page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
       const bankPad = MARGIN_LEFT + 5;
-      page.drawLine({ start: { x: MARGIN_LEFT, y: y - 40 }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - 40 }, thickness: 1, color: rgb(0, 0, 0) });
       const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
-      page.drawText(gstStr, { x: bankPad, y: y - 54, size: 12, font: boldFont });
+      page.drawText(gstStr, { x: bankPad, y: y - 44, size: 12, font: boldFont });
 
       const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false, labelColor?: any) => {
         const f = isBold ? boldFont : font;
