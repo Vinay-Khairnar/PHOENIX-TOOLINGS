@@ -330,7 +330,7 @@ export async function GET(
       y -= headerHeight;
 
       const numRows = ITEMS_PER_PAGE;
-      const rowHeight = 28; // Decreased from 32 to prevent terms box from overlapping footer
+      const rowHeight = 20; // Reduced to make table rows compact and neat
       const tableBodyHeight = numRows * rowHeight;
 
       // Draw outer rectangle for the whole table body and vertical column lines
@@ -392,7 +392,7 @@ export async function GET(
 
             const lines = breakText(rowTexts[j], colWidths[j] - 6);
 
-            let textY = y - 12;
+            let textY = y - 14;
             for (const l of lines) {
               const tWidth = font.widthOfTextAtSize(l, 9);
               let textX = curRowX + 3;
