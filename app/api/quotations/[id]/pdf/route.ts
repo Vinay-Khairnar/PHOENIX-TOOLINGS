@@ -16,6 +16,14 @@ function formatIndianCurrency(num: number): string {
   return res;
 }
 
+function hexColor(hex: string) {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  return rgb(r, g, b);
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -172,21 +180,79 @@ export async function GET(
       });
 
       // Company info lines below QUOTATION title
-      const infoLines = [
-        { label: "WORKS : ", value: "A-51 MIDC WALUJ,  AURANGABAD - 431 136, MAHARASTRA, INDIA." },
-        { label: "CALL : ", value: "+91 9890448625 / +91 9766791555" },
-        { label: "E-mail : ", value: "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com" },
-      ];
+      const rawAddress = (settings?.address || "A-51 MIDC WALUJ, AURANGABAD - 431 136, MAHARASTRA, INDIA.").toUpperCase();
+      let addressLines: string[] = [];
+      if (rawAddress.includes('\n')) {
+        addressLines = rawAddress.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      } else {
+        const commaParts = rawAddress.split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (commaParts.length >= 2) {
+          let line1 = commaParts[0];
+          let splitIdx = 1;
+          for (let i = 1; i < commaParts.length - 1; i++) {
+            if ((line1 + ", " + commaParts[i]).length <= 40) {
+              line1 += ", " + commaParts[i];
+              splitIdx = i + 1;
+            } else {
+              break;
+            }
+          }
+          addressLines = [
+            line1 + ",",
+            commaParts.slice(splitIdx).join(', ')
+          ];
+        } else {
+          const words = rawAddress.split(' ');
+          const mid = Math.ceil(words.length / 2);
+          addressLines = [
+            words.slice(0, mid).join(' '),
+            words.slice(mid).join(' ')
+          ];
+        }
+      }
+
       const infoFontSize = 8;
-      let infoY = A4_HEIGHT - 55;
+      let infoY = A4_HEIGHT - 60;
       const infoStartX = MARGIN_LEFT + 15;
-      const labelColor = rgb(1, 0, 0);
-      for (const line of infoLines) {
-        const labelWidth = boldFont.widthOfTextAtSize(line.label, infoFontSize);
-        page.drawText(line.label, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
-        page.drawText(line.value, { x: infoStartX + labelWidth, y: infoY, size: infoFontSize, font: boldFont });
+      const labelColor = hexColor('#D51947');
+
+      // Separate labels, colons, and values into aligned columns
+      const worksText = "WORKS";
+      const callText = "CALL";
+      const emailText = "E-mail";
+
+      const maxLabelTextWidth = Math.max(
+        boldFont.widthOfTextAtSize(worksText, infoFontSize),
+        boldFont.widthOfTextAtSize(callText, infoFontSize),
+        boldFont.widthOfTextAtSize(emailText, infoFontSize)
+      );
+
+      const colonX = infoStartX + maxLabelTextWidth + 8;
+      const valueX = colonX + boldFont.widthOfTextAtSize(":", infoFontSize) + 8;
+
+      // Draw WORKS
+      page.drawText(worksText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(addressLines[0] || '', { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      infoY -= 12;
+
+      for (let i = 1; i < addressLines.length; i++) {
+        page.drawText(addressLines[i], { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
         infoY -= 12;
       }
+
+      // Draw CALL
+      const callValue = settings?.phone || "+91 9890448625 / +91 9766791555";
+      page.drawText(callText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(callValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      infoY -= 12;
+
+      // Draw E-mail
+      const emailValue = settings?.email || "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com";
+      page.drawText(emailText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
 
       // 2. Info Block
       const leftWidth = CONTENT_WIDTH * 0.61;
@@ -220,16 +286,24 @@ export async function GET(
       const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
       const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
 
+      const rightLabels = ["QUOTATION NO.", "DATE", "REF NO.", "REF DATE."];
+      const maxRightLabelWidth = Math.max(...rightLabels.map((l: string) => font.widthOfTextAtSize(l, 9)));
+      const rightColonX = rightX + 3 + maxRightLabelWidth + 8;
+      const rightValueX = rightColonX + font.widthOfTextAtSize(":", 9) + 12;
+
       const drawRightCell = (label: string, val: string, index: number) => {
         const rowY = y - index * rightRowH;
         page.drawText(label, { x: rightX + 3, y: rowY - 13, size: 9, font: font });
-        page.drawText(val, { x: rightX + rightLabelW + 3, y: rowY - 13, size: 9, font: font });
+        page.drawText(":", { x: rightColonX, y: rowY - 13, size: 9, font: font });
+        if (val) {
+          page.drawText(val, { x: rightValueX, y: rowY - 13, size: 9, font: font });
+        }
       }
 
-      drawRightCell("QUOTATION NO. :", quote.quoteNumber, 0);
-      drawRightCell("DATE :", qtnDate, 1);
-      drawRightCell("REF NO. :", quote.refNumber || "AS PER VISIT", 2);
-      drawRightCell("REF DATE. :", refDate, 3);
+      drawRightCell("QUOTATION NO.", quote.quoteNumber, 0);
+      drawRightCell("DATE", qtnDate, 1);
+      drawRightCell("REF NO.", quote.refNumber || "AS PER VISIT", 2);
+      drawRightCell("REF DATE.", refDate, 3);
 
       y -= row2Height;
 
@@ -346,9 +420,8 @@ export async function GET(
       page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
       const bankPad = MARGIN_LEFT + 5;
-      page.drawLine({ start: { x: MARGIN_LEFT, y: y - 40 }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - 40 }, thickness: 1, color: rgb(0, 0, 0) });
       const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
-      page.drawText(gstStr, { x: bankPad, y: y - 54, size: 12, font: boldFont });
+      page.drawText(gstStr, { x: bankPad, y: y - 44, size: 12, font: boldFont });
 
       const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false, labelColor?: any) => {
         const f = isBold ? boldFont : font;
@@ -370,7 +443,7 @@ export async function GET(
 
         drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
         drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
-        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, rgb(1, 0, 0));
+        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, labelColor);
       } else {
         const contText = "Continued on next page...";
         page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
