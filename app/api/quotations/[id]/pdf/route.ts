@@ -121,7 +121,7 @@ export async function GET(
 
     const chunks = [];
     if (quote.items.length === 0) chunks.push([]);
-    const ITEMS_PER_PAGE = 10;
+    const ITEMS_PER_PAGE = 12;
     for (let i = 0; i < quote.items.length; i += ITEMS_PER_PAGE) {
       chunks.push(quote.items.slice(i, i + ITEMS_PER_PAGE));
     }
@@ -320,8 +320,8 @@ export async function GET(
 
       // 5. Table Header
       const headerHeight = 18;
-      const headers = ["ITEM NO.", "DESCRIPTION", "MAKE", "DRG. NO.", "QTY", "PRICE", "DISC.", "NET PRICE", "TOTAL"];
-      const colWidths = [70, 135, 65, 50, 30, 55, 35, 55, 55]; // Sum is exactly 550
+      const headers = ["SR. NO.", "ITEM NO.", "DESCRIPTION", "MAKE", "DRG. NO.", "QTY", "PRICE", "DISC.", "NET PRICE", "TOTAL"];
+      const colWidths = [35, 60, 125, 60, 45, 30, 50, 35, 55, 55]; // Sum is exactly 550
       let curX = MARGIN_LEFT;
       for (let i = 0; i < headers.length; i++) {
         drawGridCell(headers[i], curX, y, colWidths[i], headerHeight, boldFont, 8, 'center');
@@ -330,7 +330,7 @@ export async function GET(
       y -= headerHeight;
 
       const numRows = ITEMS_PER_PAGE;
-      const rowHeight = 20; // Reduced to make table rows compact and neat
+      const rowHeight = 22; // Reduced to make table rows compact and neat
       const tableBodyHeight = numRows * rowHeight;
 
       // Draw outer rectangle for the whole table body and vertical column lines
@@ -343,16 +343,18 @@ export async function GET(
 
       for (let i = 0; i < numRows; i++) {
         const item = currentChunk[i];
-        let rowTexts = ["", "", "", "", "", "", "", ""];
+        let rowTexts = ["", "", "", "", "", "", "", "", "", ""];
 
         if (item) {
           const itemDiscount = item.discount || 0;
           const netPrice = item.price * (1 - itemDiscount / 100);
           const amount = netPrice * item.quantity;
+          const srNo = pageIndex * ITEMS_PER_PAGE + i + 1;
           rowTexts = [
+            srNo.toString(),
             item.itemNumber || "",
             item.name || "",
-            item.make ? item.make.toUpperCase() : "",
+            item.make ? item.make.toUpperCase().split(' ')[0] : "",
             item.drgNumber || "",
             item.quantity.toString(),
             formatIndianCurrency(item.price),
@@ -366,8 +368,8 @@ export async function GET(
         for (let j = 0; j < colWidths.length; j++) {
           if (rowTexts[j]) {
             let align: 'left' | 'center' | 'right' = 'left';
-            if (j === 0 || j === 2 || j === 3 || j === 4 || j === 6) align = 'center';
-            if (j === 5 || j === 7 || j === 8) align = 'right';
+            if (j === 0 || j === 1 || j === 3 || j === 4 || j === 5 || j === 7) align = 'center';
+            if (j === 6 || j === 8 || j === 9) align = 'right';
 
             const breakText = (str: string, maxW: number) => {
               const res = [];
@@ -409,7 +411,7 @@ export async function GET(
       }
 
       // 7. Bank Details & Totals
-      const bankBoxWidth = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5];
+      const bankBoxWidth = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5] + colWidths[6];
       const totalsBoxWidth = CONTENT_WIDTH - bankBoxWidth;
       const summaryHeight = 60;
 
@@ -435,7 +437,7 @@ export async function GET(
       };
 
       if (isLastPage) {
-        const totalLabelW = colWidths[6] + colWidths[7];
+        const totalLabelW = colWidths[7] + colWidths[8];
         page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
 
         page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - 20 }, thickness: 1, color: rgb(0, 0, 0) });
