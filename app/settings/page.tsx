@@ -123,7 +123,7 @@ export default function SettingsPage() {
               <div>
                 <label className="block text-[13px] text-[#7a7a7a] mb-1 font-medium">Email</label>
                 <input
-                  type="email"
+                  type="text"
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
                   className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
