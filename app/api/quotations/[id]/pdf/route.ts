@@ -354,7 +354,7 @@ export async function GET(
             srNo.toString(),
             item.itemNumber || "",
             item.name || "",
-            item.make ? item.make.toUpperCase() : "",
+            item.make ? item.make.toUpperCase().split(' ')[0] : "",
             item.drgNumber || "",
             item.quantity.toString(),
             formatIndianCurrency(item.price),
