@@ -321,7 +321,7 @@ export async function GET(
       // 5. Table Header
       const headerHeight = 18;
       const headers = ["SR. NO.", "ITEM NO.", "DESCRIPTION", "MAKE", "DRG. NO.", "QTY", "PRICE", "DISC.", "NET PRICE", "TOTAL"];
-      const colWidths = [30, 60, 130, 60, 45, 30, 50, 35, 55, 55]; // Sum is exactly 550
+      const colWidths = [35, 60, 125, 60, 45, 30, 50, 35, 55, 55]; // Sum is exactly 550
       let curX = MARGIN_LEFT;
       for (let i = 0; i < headers.length; i++) {
         drawGridCell(headers[i], curX, y, colWidths[i], headerHeight, boldFont, 8, 'center');
