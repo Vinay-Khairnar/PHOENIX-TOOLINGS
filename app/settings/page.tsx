@@ -155,6 +155,7 @@ export default function SettingsPage() {
                 min="1"
                 value={formData.startingQuoteNumber}
                 onChange={e => setFormData({...formData, startingQuoteNumber: parseInt(e.target.value, 10) || 1})}
+                onFocus={(e) => e.target.select()}
                 className="w-full bg-[#f5f5f7] border border-[#e0e0e0] rounded-[11px] p-3 text-[15px] outline-none focus:ring-2 focus:ring-[#0066cc]"
               />
               <p className="text-[12px] text-[#999] mt-1">If the current highest quote is lower, the next generated quote will start from this number.</p>

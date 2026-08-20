@@ -119,6 +119,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
                 step="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
+                onFocus={(e) => e.target.select()}
                 disabled={isSubmitting}
                 className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2.5 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                 placeholder="₹ 0.00"
