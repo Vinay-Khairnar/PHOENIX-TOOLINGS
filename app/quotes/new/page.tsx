@@ -415,6 +415,7 @@ export default function Home() {
                         min="1" 
                         value={item.quantity}
                         onChange={(e) => updateItemQuantity(item.productId, Math.max(1, parseInt(e.target.value) || 1))}
+                        onFocus={(e) => e.target.select()}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
@@ -429,6 +430,7 @@ export default function Home() {
                           val = Math.max(0, Math.min(100, val));
                           updateItemDiscount(item.productId, val);
                         }}
+                        onFocus={(e) => e.target.select()}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
@@ -475,6 +477,7 @@ export default function Home() {
                 val = Math.max(0, Math.min(100, val));
                 setDiscount(val);
               }}
+              onFocus={(e) => e.target.select()}
               className="w-20 bg-white border border-[#e0e0e0] rounded-[5px] p-1 text-right"
             />
           </div>
