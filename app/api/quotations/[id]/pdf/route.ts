@@ -95,6 +95,20 @@ export async function GET(
       }
     }
 
+    // Pre-embed company stamp
+    let stampImage: any = null;
+    try {
+      const stampPathJpg = path.join(process.cwd(), 'public', 'company-stamp.jpg');
+      const stampPathPng = path.join(process.cwd(), 'public', 'company-stamp.png');
+      if (fs.existsSync(stampPathJpg)) {
+        stampImage = await pdfDoc.embedJpg(fs.readFileSync(stampPathJpg));
+      } else if (fs.existsSync(stampPathPng)) {
+        stampImage = await pdfDoc.embedPng(fs.readFileSync(stampPathPng));
+      }
+    } catch (e) {
+      console.error('Failed to pre-embed stamp image:', e);
+    }
+
     const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
 
     // Standard margins for decoupled header and footer images
@@ -551,32 +565,24 @@ export async function GET(
       const totalTitleWidth = forWidth + companyWidth;
 
       const titleStartX = signX + (totalsBoxWidth - totalTitleWidth) / 2;
-      page.drawText(forText, { x: titleStartX, y: y - 15, size: 10, font: font });
-      page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 15, size: 10, font: boldFont });
+      page.drawText(forText, { x: titleStartX, y: y - 36, size: 10, font: font });
+      page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 36, size: 10, font: boldFont });
 
-      // Embed stamp image
-      try {
-        const stampPath = path.join(process.cwd(), 'public', 'company-stamp.jpg');
-        if (fs.existsSync(stampPath)) {
-          const stampBytes = fs.readFileSync(stampPath);
-          const stampImage = await pdfDoc.embedJpg(stampBytes);
-          const stampDims = stampImage.scaleToFit(160, 80);
-          const stampDrawX = signX + (totalsBoxWidth - stampDims.width) / 2;
-          const stampDrawY = y - termsHeight + 22;
-          page.drawImage(stampImage, {
-            x: stampDrawX,
-            y: stampDrawY,
-            width: stampDims.width,
-            height: stampDims.height,
-          });
-        }
-      } catch (e) {
-        console.error('Failed to embed stamp image:', e);
+      // Draw company stamp image (compact size, centered)
+      if (stampImage) {
+        const stampDims = stampImage.scaleToFit(110, 55);
+        const stampDrawX = signX + (totalsBoxWidth - stampDims.width) / 2;
+        const stampDrawY = y - 96;
+        page.drawImage(stampImage, {
+          x: stampDrawX,
+          y: stampDrawY,
+          width: stampDims.width,
+          height: stampDims.height,
+        });
       }
 
-
       const signText = "Authorised Signatory";
-      page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10)) / 2, y: y - termsHeight + 6, size: 10, font: font });
+      page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10)) / 2, y: y - 108, size: 10, font: font });
 
       y -= termsHeight;
 
