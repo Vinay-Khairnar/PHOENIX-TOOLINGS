@@ -5,14 +5,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 function formatIndianCurrency(num: number): string {
-  const x = num.toFixed(2);
-  const parts = x.split('.');
-  let lastThree = parts[0].substring(parts[0].length - 3);
-  const otherNumbers = parts[0].substring(0, parts[0].length - 3);
+  const rounded = Math.round(num).toString();
+  let lastThree = rounded.substring(rounded.length - 3);
+  const otherNumbers = rounded.substring(0, rounded.length - 3);
   if (otherNumbers != '') {
     lastThree = ',' + lastThree;
   }
-  const res = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree + '.' + parts[1];
+  const res = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
   return res;
 }
 
@@ -77,26 +76,22 @@ export async function GET(
       headerLogoImage = await pdfDoc.embedPng(headerLogoBytes);
     }
 
-    // Footer text is drawn dynamically, no image needed
-    let partnersBytes;
-    try {
-      const partnersPath = path.join(process.cwd(), 'public', 'partners.jpg');
-      partnersBytes = fs.readFileSync(partnersPath);
-    } catch (e) {
-      try {
-        const partnersPathPng = path.join(process.cwd(), 'public', 'partners.png');
-        partnersBytes = fs.readFileSync(partnersPathPng);
-      } catch (e2) { }
-    }
-
-    let partnersImage: any;
-    if (partnersBytes) {
-      try {
-        partnersImage = await pdfDoc.embedJpg(partnersBytes);
-      } catch (e) {
+    // Load individual partner logos from public/logos/
+    const logoNames = ['iscar', 'ctc', 'regofix', 'hnti', 'addison'];
+    const loadedLogos: { name: string; image: any }[] = [];
+    for (const logoName of logoNames) {
+      const logosDir = path.join(process.cwd(), 'public', 'logos');
+      let logoImage: any = null;
+      for (const ext of ['png', 'jpg']) {
         try {
-          partnersImage = await pdfDoc.embedPng(partnersBytes);
-        } catch (e2) { }
+          const logoPath = path.join(logosDir, `${logoName}.${ext}`);
+          const logoBytes = fs.readFileSync(logoPath);
+          logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+          break;
+        } catch (e) { }
+      }
+      if (logoImage) {
+        loadedLogos.push({ name: logoName, image: logoImage });
       }
     }
 
@@ -178,6 +173,15 @@ export async function GET(
         size: 14,
         font: boldFont
       });
+      const titlePadX = 15;
+      const titlePadY = 5;
+      const capsuleW = quotationTitleWidth + titlePadX * 2;
+      const capsuleH = 14 + titlePadY * 2;
+      const capsuleR = capsuleH / 2;
+      const capsuleX = MARGIN_LEFT + (CONTENT_WIDTH - capsuleW) / 2;
+      const capsuleTopY = A4_HEIGHT - 22 - titlePadY + capsuleH;
+      const capsulePath = `M ${capsuleR},0 L ${capsuleW - capsuleR},0 A ${capsuleR},${capsuleR} 0 0,1 ${capsuleW - capsuleR},${capsuleH} L ${capsuleR},${capsuleH} A ${capsuleR},${capsuleR} 0 0,1 ${capsuleR},0 Z`;
+      page.drawSvgPath(capsulePath, { x: capsuleX, y: capsuleTopY, borderColor: rgb(0, 0, 0), borderWidth: 1 });
 
       // Company info lines below QUOTATION title
       const rawAddress = (settings?.address || "A-51 MIDC WALUJ, AURANGABAD - 431 136, MAHARASTRA, INDIA.").toUpperCase();
@@ -254,14 +258,17 @@ export async function GET(
       page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
       page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
 
+      // Separator line under email section
+      const separatorY = infoY - 8;
+      page.drawLine({ start: { x: 0, y: separatorY }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: separatorY }, thickness: 0.75, color: rgb(0.4, 0.4, 0.4) });
+      y = separatorY - 5;
+
       // 2. Info Block
       const leftWidth = CONTENT_WIDTH * 0.61;
       const rightWidth = CONTENT_WIDTH - leftWidth;
       const row2Height = 80;
 
-      // Draw outer box for the info block
-      page.drawRectangle({ x: MARGIN_LEFT, y: y - row2Height, width: CONTENT_WIDTH, height: row2Height, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      page.drawLine({ start: { x: MARGIN_LEFT + leftWidth, y }, end: { x: MARGIN_LEFT + leftWidth, y: y - row2Height }, thickness: 1, color: rgb(0, 0, 0) });
+      // Info block (no borders)
 
       // Left Content
       const leftPad = MARGIN_LEFT + 5;
@@ -309,13 +316,20 @@ export async function GET(
 
       // 3. KIND ATTN
       const row3Height = 20;
-      page.drawRectangle({ x: MARGIN_LEFT, y: y - row3Height, width: CONTENT_WIDTH, height: row3Height, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      page.drawText(`KIND ATTN : ${quote.contactPerson || ''}`, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
+      const kindAttnLabel = "KIND ATTN : ";
+      page.drawText(kindAttnLabel, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
+      const kindAttnLabelWidth = font.widthOfTextAtSize(kindAttnLabel, 9);
+      page.drawText(quote.contactPerson || '', { x: MARGIN_LEFT + 5 + kindAttnLabelWidth, y: y - 13, size: 9, font: boldFont });
       y -= row3Height;
 
       // 4. Reference
-      const row4Height = 20;
-      drawGridCell("With Reference to your enquiry we are submitting our quotation as follows", MARGIN_LEFT, y, CONTENT_WIDTH, row4Height, font, 9, 'center', false);
+      const row4Height = 30;
+      const refLine1 = "We thank you very much for your valued enquiry.";
+      const refLine2 = "We are pleased to submit our best quotation for your potential requirement, as detailed below:";
+      const refLine1Width = font.widthOfTextAtSize(refLine1, 9);
+      const refLine2Width = font.widthOfTextAtSize(refLine2, 9);
+      page.drawText(refLine1, { x: MARGIN_LEFT + 5, y: y - 11, size: 9, font: font });
+      page.drawText(refLine2, { x: MARGIN_LEFT + 5, y: y - 23, size: 9, font: font });
       y -= row4Height;
 
       // 5. Table Header
@@ -445,7 +459,7 @@ export async function GET(
 
         drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
         drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
-        drawTaxRow(y - 40, "TOTAL", formatIndianCurrency(grandTotal), true, labelColor);
+        drawTaxRow(y - 40, "TOTAL AMOUNT", formatIndianCurrency(grandTotal), true, labelColor);
       } else {
         const contText = "Continued on next page...";
         page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
@@ -458,11 +472,10 @@ export async function GET(
 
       // 8. Terms & Conditions
       const termsHeight = 140;
-      page.drawRectangle({ x: MARGIN_LEFT, y: y - termsHeight, width: CONTENT_WIDTH, height: termsHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - termsHeight }, thickness: 1, color: rgb(0, 0, 0) });
+
 
       // Left side terms header
-      page.drawRectangle({ x: MARGIN_LEFT, y: y - 20, width: bankBoxWidth, height: 20, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+
       page.drawText("Terms and Condition :", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: boldFont });
 
       const defaultTerms = [
@@ -541,8 +554,8 @@ export async function GET(
         if (fs.existsSync(stampPath)) {
           const stampBytes = fs.readFileSync(stampPath);
           const stampImage = await pdfDoc.embedJpg(stampBytes);
-          const stampDims = stampImage.scaleToFit(130, 65);
-          const stampDrawX = signX + totalsBoxWidth - stampDims.width - 5;
+          const stampDims = stampImage.scaleToFit(160, 80);
+          const stampDrawX = signX + (totalsBoxWidth - stampDims.width) / 2;
           const stampDrawY = y - termsHeight + 22;
           page.drawImage(stampImage, {
             x: stampDrawX,
@@ -555,7 +568,7 @@ export async function GET(
         console.error('Failed to embed stamp image:', e);
       }
 
-      page.drawLine({ start: { x: signX, y: y - termsHeight + 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - termsHeight + 20 }, thickness: 1, color: rgb(0, 0, 0) });
+
       const signText = "Authorised Signatory";
       page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10)) / 2, y: y - termsHeight + 6, size: 10, font: font });
 
@@ -579,14 +592,45 @@ export async function GET(
       page.drawLine({ start: { x: MARGIN_LEFT, y: y - 2 }, end: { x: MARGIN_LEFT + boldFont.widthOfTextAtSize(titleStr, 9), y: y - 2 }, thickness: 1, color: rgb(0, 0, 0) });
       y -= 10;
 
-      if (partnersImage) {
-        const pDims = partnersImage.scaleToFit(CONTENT_WIDTH, 35);
-        page.drawImage(partnersImage, {
-          x: MARGIN_LEFT,
-          y: y - pDims.height,
-          width: pDims.width,
-          height: pDims.height,
-        });
+      if (loadedLogos.length > 0) {
+        // Balanced visual sizing for equal weight & height
+        const logoSizes: Record<string, { maxW: number; maxH: number }> = {
+          iscar: { maxW: 75, maxH: 26 },
+          ctc: { maxW: 95, maxH: 24 },
+          regofix: { maxW: 95, maxH: 18 },
+          hnti: { maxW: 75, maxH: 33 },
+          addison: { maxW: 58, maxH: 26 },
+        };
+
+        const maxBannerH = 34;
+        const logoDims: { image: any; w: number; h: number }[] = [];
+        let totalLogosWidth = 0;
+
+        for (const logo of loadedLogos) {
+          const size = logoSizes[logo.name] || { maxW: 80, maxH: 26 };
+          const dims = logo.image.scaleToFit(size.maxW, size.maxH);
+          logoDims.push({ image: logo.image, w: dims.width, h: dims.height });
+          totalLogosWidth += dims.width;
+        }
+
+        // Compact, uniform spacing between logos (centered across banner)
+        const logoGap = 22;
+        const totalGroupWidth = totalLogosWidth + (loadedLogos.length - 1) * logoGap;
+        let currentX = MARGIN_LEFT + (CONTENT_WIDTH - totalGroupWidth) / 2;
+
+        for (const item of logoDims) {
+          // Center vertically within the banner row
+          const logoY = y - maxBannerH + (maxBannerH - item.h) / 2;
+
+          page.drawImage(item.image, {
+            x: currentX,
+            y: logoY,
+            width: item.w,
+            height: item.h,
+          });
+
+          currentX += item.w + logoGap;
+        }
       } else {
         const partnersText = "ISCAR   |   CTC PRECISION   |   REGO-FIX   |   HNTI OIL   |   ADDISON";
         page.drawText(partnersText, { x: MARGIN_LEFT, y: y - 10, size: 10, font: boldFont });
