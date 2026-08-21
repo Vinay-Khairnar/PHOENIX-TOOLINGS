@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { PDFDocument, rgb, StandardFonts, PDFImage, PageSizes } from 'pdf-lib';
 import * as fs from 'fs';
 import * as path from 'path';
+import { COMPANY_STAMP_BASE64 } from '@/lib/stampBase64';
 
 function formatIndianCurrency(num: number): string {
   const rounded = Math.round(num).toString();
@@ -95,18 +96,40 @@ export async function GET(
       }
     }
 
-    // Pre-embed company stamp
+    // Pre-embed company stamp with multi-tier fallback (File -> Base64)
     let stampImage: any = null;
-    try {
-      const stampPathJpg = path.join(process.cwd(), 'public', 'company-stamp.jpg');
-      const stampPathPng = path.join(process.cwd(), 'public', 'company-stamp.png');
-      if (fs.existsSync(stampPathJpg)) {
-        stampImage = await pdfDoc.embedJpg(fs.readFileSync(stampPathJpg));
-      } else if (fs.existsSync(stampPathPng)) {
-        stampImage = await pdfDoc.embedPng(fs.readFileSync(stampPathPng));
+    let stampBytes: Buffer | null = null;
+
+    const stampCandidates = [
+      path.join(process.cwd(), 'public', 'company-stamp.jpg'),
+      path.join(process.cwd(), 'public', 'company-stamp.png'),
+      path.join(process.cwd(), 'public', 'company-stamp.jpeg'),
+    ];
+    for (const p of stampCandidates) {
+      try {
+        if (fs.existsSync(p)) {
+          stampBytes = fs.readFileSync(p);
+          if (stampBytes && stampBytes.length > 0) break;
+        }
+      } catch (e) { }
+    }
+
+    if (!stampBytes || stampBytes.length === 0) {
+      try {
+        stampBytes = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
+      } catch (e) { }
+    }
+
+    if (stampBytes && stampBytes.length > 0) {
+      try {
+        stampImage = await pdfDoc.embedJpg(stampBytes);
+      } catch (e1) {
+        try {
+          stampImage = await pdfDoc.embedPng(stampBytes);
+        } catch (e2) {
+          console.error('Failed to embed stamp image:', e2);
+        }
       }
-    } catch (e) {
-      console.error('Failed to pre-embed stamp image:', e);
     }
 
     const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
