@@ -237,11 +237,11 @@ export async function GET(
       // Draw WORKS
       page.drawText(worksText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
       page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
-      page.drawText(addressLines[0] || '', { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      page.drawText(addressLines[0] || '', { x: valueX, y: infoY, size: infoFontSize, font: font });
       infoY -= 12;
 
       for (let i = 1; i < addressLines.length; i++) {
-        page.drawText(addressLines[i], { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+        page.drawText(addressLines[i], { x: valueX, y: infoY, size: infoFontSize, font: font });
         infoY -= 12;
       }
 
@@ -249,24 +249,31 @@ export async function GET(
       const callValue = settings?.phone || "+91 9890448625 / +91 9766791555";
       page.drawText(callText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
       page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
-      page.drawText(callValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      page.drawText(callValue, { x: valueX, y: infoY, size: infoFontSize, font: font });
       infoY -= 12;
 
       // Draw E-mail
       const emailValue = settings?.email || "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com";
       page.drawText(emailText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
       page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
-      page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: boldFont });
+      page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: font });
 
-      // Separator line under email section
+      // Separator line under email section (reduced by 30%, centered)
       const separatorY = infoY - 8;
-      page.drawLine({ start: { x: 0, y: separatorY }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: separatorY }, thickness: 0.75, color: rgb(0.4, 0.4, 0.4) });
-      y = separatorY - 5;
+      const sepLineWidth = CONTENT_WIDTH * 0.70;
+      const sepStartX = MARGIN_LEFT + (CONTENT_WIDTH - sepLineWidth) / 2;
+      page.drawLine({
+        start: { x: sepStartX, y: separatorY },
+        end: { x: sepStartX + sepLineWidth, y: separatorY },
+        thickness: 0.75,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+      y = separatorY - 8;
 
       // 2. Info Block
       const leftWidth = CONTENT_WIDTH * 0.61;
       const rightWidth = CONTENT_WIDTH - leftWidth;
-      const row2Height = 80;
+      const row2Height = 62;
 
       // Info block (no borders)
 
@@ -276,9 +283,9 @@ export async function GET(
       page.drawText(quote.customerName || '', { x: leftPad, y: y - 26, size: 10, font: boldFont });
 
       let addrLines = (quote.customerAddress || "").split('\n');
-      let addrY = y - 40;
+      let addrY = y - 38;
       for (const line of addrLines) {
-        if (addrY < y - 75) break;
+        if (addrY < y - 60) break;
         page.drawText(line.substring(0, 60), { x: leftPad, y: addrY, size: 9, font: font });
         addrY -= 12;
       }
@@ -287,8 +294,7 @@ export async function GET(
       const rightLabelW = rightWidth * 0.45;
       const rightX = MARGIN_LEFT + leftWidth;
 
-      // (Horizontal and vertical separation lines removed as per user request)
-      const rightRowH = row2Height / 4;
+      const rightRowH = 14;
 
       const qtnDate = quote.createdAt ? new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : '';
       const refDate = quote.refDate ? new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-') : '';
@@ -300,10 +306,10 @@ export async function GET(
 
       const drawRightCell = (label: string, val: string, index: number) => {
         const rowY = y - index * rightRowH;
-        page.drawText(label, { x: rightX + 3, y: rowY - 13, size: 9, font: font });
-        page.drawText(":", { x: rightColonX, y: rowY - 13, size: 9, font: font });
+        page.drawText(label, { x: rightX + 3, y: rowY - 12, size: 9, font: font });
+        page.drawText(":", { x: rightColonX, y: rowY - 12, size: 9, font: font });
         if (val) {
-          page.drawText(val, { x: rightValueX, y: rowY - 13, size: 9, font: font });
+          page.drawText(val, { x: rightValueX, y: rowY - 12, size: 9, font: font });
         }
       }
 
