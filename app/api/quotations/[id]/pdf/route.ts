@@ -675,11 +675,14 @@ export async function GET(
 
     const pdfBytes = await pdfDoc.save();
 
+    const safeFilename = (quote.quoteNumber || 'Quotation').replace(/\//g, '/');
+    const encodedFilename = encodeURIComponent(`${safeFilename}.pdf`);
+    const fallbackAscii = (quote.quoteNumber || 'Quotation').replace(/[^a-zA-Z0-9._-]/g, '_') + '.pdf';
     return new Response(Buffer.from(pdfBytes), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${quote.quoteNumber}.pdf"`,
+        'Content-Disposition': `inline; filename="${fallbackAscii}"; filename*=UTF-8''${encodedFilename}`,
       },
     });
 

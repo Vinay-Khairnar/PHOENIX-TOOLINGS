@@ -16,9 +16,10 @@ export function DownloadQuoteButton({ id, quoteNumber }: { id: string, quoteNumb
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
+      const safeQuoteNumber = (quoteNumber || 'Quotation').replace(/\//g, '∕');
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${quoteNumber}.pdf`;
+      a.download = `${safeQuoteNumber}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

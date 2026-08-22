@@ -157,9 +157,10 @@ export default function Home() {
         if (pdfRes.ok) {
           const blob = await pdfRes.blob();
           const url = window.URL.createObjectURL(blob);
+          const safeQuoteNumber = (quote.quoteNumber || 'Quotation').replace(/\//g, '∕');
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${quote.quoteNumber}.pdf`;
+          a.download = `${safeQuoteNumber}.pdf`;
           document.body.appendChild(a);
           a.click();
           window.URL.revokeObjectURL(url);
