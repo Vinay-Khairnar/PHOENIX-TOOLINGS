@@ -185,82 +185,119 @@ export async function POST(request: Request) {
       const pdfParse = require('pdf-parse/lib/pdf-parse.js');
       const pdfBuffer = Buffer.from(buffer);
       
-      function render_page(pageData: any) {
-        let render_options = { normalizeWhitespace: false, disableCombineTextItems: false };
-        return pageData.getTextContent(render_options).then(function(textContent: any) {
-            let lastY, text = '';
-            for (let item of textContent.items) {
-                if (lastY == item.transform[5] || !lastY){
-                    text += ' ' + item.str;
-                } else{
-                    text += '\n' + item.str;
-                }    
-                lastY = item.transform[5];
-            }            
-            return text;
+      function pagerender(pageData: any) {
+        return pageData.getTextContent({ normalizeWhitespace: true }).then((textContent: any) => {
+          const rows: Record<number, Array<{ x: number; str: string }>> = {};
+          for (const item of textContent.items) {
+            if (!item.str || !item.str.trim()) continue;
+            const y = Math.round(item.transform[5] * 2) / 2;
+            if (!rows[y]) rows[y] = [];
+            rows[y].push({ x: item.transform[4], str: item.str.trim() });
+          }
+          
+          const sortedY = Object.keys(rows).map(Number).sort((a, b) => b - a);
+          const lines: string[] = [];
+          for (const y of sortedY) {
+            const items = rows[y].sort((a, b) => a.x - b.x);
+            lines.push(items.map(it => it.str).join('   '));
+          }
+          return lines.join('\n');
         });
       }
-      
-      const data = await pdfParse(pdfBuffer, { pagerender: render_page });
+
+      const data = await pdfParse(pdfBuffer, { pagerender });
       const lines = data.text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-      
-      let foundHeader = false;
+
       for (const line of lines) {
-        if (!foundHeader) {
-          const lower = line.toLowerCase();
-          if (
-            lower.includes('item name') || 
-            (lower.includes('sr. no') && lower.includes('price')) ||
-            (lower.includes('description') && lower.includes('cat.no'))
-          ) {
-            foundHeader = true;
-          }
+        if (
+          line.includes('GENERAL TERMS') || 
+          line.includes('Definitions :') || 
+          line.includes('ISCAR LTD stock') || 
+          line.includes('Price List') || 
+          line.includes('Description Grade') || 
+          line.includes('L E G E N D') ||
+          line.includes('International standard') ||
+          line.includes('Gross Price') ||
+          line.includes('Discount-26') ||
+          line.includes('Net Price after') ||
+          line.includes('Sr. No.   Art.-No.') ||
+          /Page\s+\d+\s+of\s+\d+/i.test(line) ||
+          /^Page\s+\d+/i.test(line)
+        ) {
           continue;
         }
-        
-        // Match format 1: 1 2345 lorem 1 ₹8,000 (Sr. No., Item No., Description, Price)
-        const match1 = line.match(/^(\d+)\s+(\S+)\s+(.+?)\s+(?:₹|Rs\.?)?\s*([\d,.]+)$/i);
-        // Match format 2: AX 11-CF Ø 6.0 mm 1 B 482.75436 n 17,983.00 (Description, Grade, Cat No, Optional currency/text, Price)
-        const match2 = line.match(/^(.+?)\s+(\S+)\s+(\S+)\s+(?:[a-zA-Z]+\s+)?([\d,.]+)$/i);
-        
-        if (match1) {
-          const artNo = match1[2];
-          const itemName = match1[3];
-          const priceStr = match1[4].replace(/,/g, '');
-          const price = parseFloat(priceStr);
-          
+
+        // 1. REGO-FIX Format: Sr.No | Art-No (e.g. 4230.11630) | Item Name | Gross Price | Discount% | Net Price
+        // Example: '1   4230.11630   SK 30 / ER 16 x 070 H   22,163.00   50%   11,082.00'
+        const regoMatch = line.match(/^(\d+)\s+([0-9]{4,5}\.[0-9]{4,5}[A-Z0-9]*)\s+(.+?)\s+([\d,]+(?:\.\d{2})?)\s+(?:\d+%)?\s+([\d,]+(?:\.\d{2})?)$/);
+        if (regoMatch) {
+          const artNo = regoMatch[2].trim();
+          const itemName = regoMatch[3].trim();
+          const grossPrice = parseFloat(regoMatch[4].replace(/,/g, ''));
+          const netPrice = parseFloat(regoMatch[5].replace(/,/g, ''));
+          const price = grossPrice > 0 ? grossPrice : netPrice;
+
+          if (itemName && price > 0) {
+            validItems.push({
+              name: itemName,
+              itemNumber: artNo,
+              sku: null,
+              description: null,
+              price,
+            });
+            continue;
+          }
+        }
+
+        // 2. ISCAR Dual-Column or Single-Column Format:
+        // A line may contain 1 or 2 ISCAR products, each ending with [Cat.Nr (6-8 digits)] [Price]
+        // e.g. '06IL 0.50 ISO IC228 3 N1 5901594 2140.00   08IR 1.50 ISO IC908 2 N1 5991115 2240.00'
+        const iscarProductRegex = /(.+?)\s+(\d{6,8})\s+([\d,]+(?:\.\d{2})?)(?:\s{3,}|$)/g;
+        let iscarMatch: RegExpExecArray | null;
+        let foundIscar = false;
+
+        while ((iscarMatch = iscarProductRegex.exec(line)) !== null) {
+          const prefix = iscarMatch[1].trim();
+          const catNr = iscarMatch[2].trim();
+          const price = parseFloat(iscarMatch[3].replace(/,/g, ''));
+
+          if (prefix && price > 0 && prefix.length < 80) {
+            const cleanedName = prefix
+              .replace(/\s+\d\s+[A-Z0-9]{1,4}$/i, '')
+              .replace(/\s+[A-Z0-9]{1,4}$/i, '')
+              .trim();
+
+            validItems.push({
+              name: cleanedName || prefix,
+              itemNumber: catNr,
+              sku: null,
+              description: null,
+              price,
+            });
+            foundIscar = true;
+          }
+        }
+        if (foundIscar) continue;
+
+        // 3. Standard Tabular Format: [Sr.No] [Art.No/ItemNo] [Description] [Price]
+        const stdMatch = line.match(/^(\d+)\s+(\S+)\s+(.+?)\s+([\d,]+(?:\.\d{2})?)$/);
+        if (stdMatch) {
+          const artNo = stdMatch[2].trim();
+          const itemName = stdMatch[3].trim();
+          const price = parseFloat(stdMatch[4].replace(/,/g, ''));
           if (itemName && !isNaN(price) && price > 0) {
             validItems.push({
-              name: itemName.trim(),
-              itemNumber: artNo.trim(),
+              name: itemName,
+              itemNumber: artNo,
               sku: null,
               description: null,
-              price: price
+              price,
             });
-          } else {
-            skipped++;
+            continue;
           }
-        } else if (match2) {
-          const descPart = match2[1].trim();
-          const grade = match2[2].trim();
-          const catNo = match2[3].trim();
-          const priceStr = match2[4].replace(/,/g, '');
-          const price = parseFloat(priceStr);
-          
-          if (descPart && !isNaN(price) && price > 0) {
-            validItems.push({
-              name: `${descPart} ${grade}`, // Combine description and grade
-              itemNumber: catNo,
-              sku: null,
-              description: null,
-              price: price
-            });
-          } else {
-            skipped++;
-          }
-        } else {
-          skipped++;
         }
+
+        skipped++;
       }
     } else {
       if (isExcel) {
