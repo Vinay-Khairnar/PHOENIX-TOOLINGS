@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Upload, PackageSearch, Trash2, Search, Loader2 } from 'lucide-react';
+import { Upload, PackageSearch, Trash2, Search, Loader2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
 import ImportModal from '@/app/components/ImportModal';
 import AddProductModal from '@/app/components/AddProductModal';
+import EditProductModal from '@/app/components/EditProductModal';
 import { Plus } from 'lucide-react';
 
-interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; }
+interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; drawingNumber?: string | null; }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -16,6 +17,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -143,6 +145,13 @@ export default function ProductsPage() {
         onSuccess={handleImportSuccess}
       />
 
+      <EditProductModal
+        product={editingProduct}
+        isOpen={!!editingProduct}
+        onClose={() => setEditingProduct(null)}
+        onSuccess={() => { fetchProducts(search, page); setEditingProduct(null); }}
+      />
+
       <div className="bg-transparent sm:bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-slate-200 overflow-hidden">
         <div className="p-0 pb-4 sm:p-4 sm:border-b sm:border-slate-100 sm:bg-slate-50/50">
           <div className="relative w-full sm:max-w-md">
@@ -163,7 +172,8 @@ export default function ProductsPage() {
               <tr>
                 <th className="px-6 py-4 w-20 whitespace-nowrap">Sr. No.</th>
                 <th className="px-6 py-4 w-1/5">Item No.</th>
-                <th className="px-6 py-4 w-1/5">Make</th>
+                <th className="px-6 py-4 w-1/6">Drg No.</th>
+                <th className="px-6 py-4 w-1/6">Make</th>
                 <th className="px-6 py-4 w-2/5">Description</th>
                 <th className="px-6 py-4 w-1/6 text-right">Price</th>
                 <th className="px-6 py-4 w-1/12 text-right">Actions</th>
@@ -206,6 +216,14 @@ export default function ProductsPage() {
                       ) : '-'}
                     </td>
                     <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
+                      <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Drg No.</span>
+                      {product.drawingNumber ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100 group-hover:bg-white transition-colors">
+                          {product.drawingNumber}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="px-1 sm:px-6 py-2 sm:py-4 flex justify-between items-center sm:table-cell border-b sm:border-0 border-slate-50">
                       <span className="sm:hidden text-xs font-semibold text-slate-400 uppercase tracking-wider">Make</span>
                       <span className="text-slate-600 font-medium">
                         {product.make ? product.make.toUpperCase() : '-'}
@@ -225,6 +243,14 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-1 sm:px-6 py-4 sm:py-4 flex justify-end sm:table-cell mt-2 sm:mt-0 sm:text-right">
                       <div className="flex justify-end gap-2 w-full">
+                        <button
+                          onClick={() => setEditingProduct(product)}
+                          className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2.5 sm:p-1.5 text-slate-600 sm:text-slate-400 bg-slate-50 sm:bg-transparent hover:text-indigo-600 hover:bg-indigo-50 rounded-xl sm:rounded-lg transition-colors font-medium text-sm sm:text-base border border-slate-200 sm:border-0"
+                          title="Edit product"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          <span className="sm:hidden">Edit</span>
+                        </button>
                         <button 
                           onClick={() => handleDelete(product.id)}
                           className="flex-1 sm:flex-none flex justify-center items-center gap-2 p-2.5 sm:p-1.5 text-slate-600 sm:text-slate-400 bg-slate-50 sm:bg-transparent hover:text-red-600 hover:bg-red-50 rounded-xl sm:rounded-lg transition-colors font-medium text-sm sm:text-base border border-slate-200 sm:border-0"

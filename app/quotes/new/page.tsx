@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
 
-interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; }
+interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; drawingNumber?: string | null; }
 interface Customer { id: string; name: string; email: string | null; phone: string | null; address: string | null; contactPerson: string | null; }
 
 export default function Home() {
@@ -355,7 +355,7 @@ export default function Home() {
             <div className="absolute top-[110px] left-0 right-0 mx-6 bg-white border border-[#e0e0e0] rounded-[12px] overflow-hidden max-h-[350px] overflow-y-auto shadow-[0_10px_40px_rgba(0,0,0,0.1)] divide-y divide-[#f0f0f0] z-50">
               {searchResults.map(product => (
                 <div key={product.id} className="flex items-center justify-between p-4 hover:bg-[#fafafc] transition-colors group/item cursor-pointer" onClick={() => {
-                  addItem({ productId: product.id, name: product.name, price: product.price, quantity: 1, discount: 0, itemNumber: product.itemNumber, make: product.make });
+                  addItem({ productId: product.id, name: product.name, price: product.price, quantity: 1, discount: 0, itemNumber: product.itemNumber, make: product.make, drgNumber: product.drawingNumber || null });
                   setSearchQuery('');
                   setSearchResults([]);
                 }}>
@@ -396,19 +396,24 @@ export default function Home() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="font-semibold text-[14px]">{item.name}</div>
-                      <div className="text-[12px] text-[#7a7a7a]">
+                      <div className="text-[12px] text-[#7a7a7a] mt-0.5">
                         {[
                           item.make ? `Make: ${item.make.toUpperCase()}` : null,
                           item.itemNumber ? `Item No: ${item.itemNumber}` : null,
                           formatCurrency(item.price)
                         ].filter(Boolean).join(' | ')}
+                        {item.drgNumber && (
+                          <span className="ml-2 inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide">
+                            DRG: {item.drgNumber}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button onClick={() => removeItem(item.productId)} className="text-[#7a7a7a] hover:text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[13px] border-t border-slate-100 pt-3 mt-1 items-end">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[13px] border-t border-slate-100 pt-3 mt-1 items-end">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Quantity</label>
                       <input 
@@ -435,21 +440,7 @@ export default function Home() {
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-center focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                       />
                     </div>
-                    {item.make?.toLowerCase() === 'phoenix' ? (
-                      <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                        <label className="text-slate-500 font-medium text-[11px] uppercase tracking-wider">Drg No.</label>
-                        <input 
-                          type="text" 
-                          value={item.drgNumber || ''}
-                          onChange={(e) => updateItemDrgNumber(item.productId, e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                          placeholder="Drawing"
-                        />
-                      </div>
-                    ) : (
-                      <div className="hidden sm:block"></div>
-                    )}
-                    <div className="flex flex-col justify-end sm:items-end col-span-2 sm:col-span-1 pb-1.5 text-right">
+                    <div className="flex flex-col justify-end items-end pb-1.5 text-right">
                       <span className="text-slate-400 font-medium text-[11px] uppercase tracking-wider sm:hidden mb-1 text-left">Total Price</span>
                       <div className="font-bold text-slate-900 text-[15px]">
                         {formatCurrency(item.price * item.quantity * (1 - (item.discount || 0) / 100))}

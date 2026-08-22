@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       name: data.name,
       sku: data.sku || null,
       itemNumber: data.itemNumber || null,
+      drawingNumber: data.drawingNumber || null,
       price: parseFloat(data.price),
       description: data.description || null,
       make: data.make ? data.make.toUpperCase() : null,
