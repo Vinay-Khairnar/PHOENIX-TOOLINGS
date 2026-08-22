@@ -186,31 +186,20 @@ export async function POST(request: Request) {
       const pdfBuffer = Buffer.from(buffer);
       
       function pagerender(pageData: any) {
-        return pageData.getTextContent().then((textContent: any) => {
+        return pageData.getTextContent({ normalizeWhitespace: true }).then((textContent: any) => {
           const rows: Record<number, Array<{ x: number; str: string }>> = {};
           for (const item of textContent.items) {
             if (!item.str || !item.str.trim()) continue;
             const y = Math.round(item.transform[5] * 2) / 2;
             if (!rows[y]) rows[y] = [];
-            rows[y].push({ x: item.transform[4], str: item.str });
+            rows[y].push({ x: item.transform[4], str: item.str.trim() });
           }
           
           const sortedY = Object.keys(rows).map(Number).sort((a, b) => b - a);
           const lines: string[] = [];
-          
           for (const y of sortedY) {
             const items = rows[y].sort((a, b) => a.x - b.x);
-            
-            // For 2-column documents (like ISCAR India price list), split into left and right columns
-            const leftItems = items.filter(it => it.x < 290);
-            const rightItems = items.filter(it => it.x >= 290);
-            
-            if (leftItems.length > 0) {
-              lines.push(leftItems.map(it => it.str).join(' '));
-            }
-            if (rightItems.length > 0) {
-              lines.push(rightItems.map(it => it.str).join(' '));
-            }
+            lines.push(items.map(it => it.str).join('   '));
           }
           return lines.join('\n');
         });
@@ -224,24 +213,55 @@ export async function POST(request: Request) {
           line.includes('GENERAL TERMS') || 
           line.includes('Definitions :') || 
           line.includes('ISCAR LTD stock') || 
-          line.includes('India Price List') || 
+          line.includes('Price List') || 
           line.includes('Description Grade') || 
           line.includes('L E G E N D') ||
-          line.includes('International standard')
+          line.includes('International standard') ||
+          line.includes('Gross Price') ||
+          line.includes('Discount-26') ||
+          line.includes('Net Price after') ||
+          line.includes('Sr. No.   Art.-No.') ||
+          /Page\s+\d+\s+of\s+\d+/i.test(line) ||
+          /^Page\s+\d+/i.test(line)
         ) {
           continue;
         }
 
-        // Match ISCAR format: [Description] [Grade] [S.C.] [Disc] [Cat.Nr (6-8 digits)] [Price]
-        // Example: '06IL 0.50 ISO IC228 3 N1 5901594 2140.00' or 'GHDR 16-4 2 2B 22800149 12090.00'
-        const iscarMatch = line.match(/^(.+?)\s+(\d{6,8})\s+([\d,]+(?:\.\d{2})?)$/);
-        if (iscarMatch) {
+        // 1. REGO-FIX Format: Sr.No | Art-No (e.g. 4230.11630) | Item Name | Gross Price | Discount% | Net Price
+        // Example: '1   4230.11630   SK 30 / ER 16 x 070 H   22,163.00   50%   11,082.00'
+        const regoMatch = line.match(/^(\d+)\s+([0-9]{4,5}\.[0-9]{4,5}[A-Z0-9]*)\s+(.+?)\s+([\d,]+(?:\.\d{2})?)\s+(?:\d+%)?\s+([\d,]+(?:\.\d{2})?)$/);
+        if (regoMatch) {
+          const artNo = regoMatch[2].trim();
+          const itemName = regoMatch[3].trim();
+          const grossPrice = parseFloat(regoMatch[4].replace(/,/g, ''));
+          const netPrice = parseFloat(regoMatch[5].replace(/,/g, ''));
+          const price = grossPrice > 0 ? grossPrice : netPrice;
+
+          if (itemName && price > 0) {
+            validItems.push({
+              name: itemName,
+              itemNumber: artNo,
+              sku: null,
+              description: null,
+              price,
+            });
+            continue;
+          }
+        }
+
+        // 2. ISCAR Dual-Column or Single-Column Format:
+        // A line may contain 1 or 2 ISCAR products, each ending with [Cat.Nr (6-8 digits)] [Price]
+        // e.g. '06IL 0.50 ISO IC228 3 N1 5901594 2140.00   08IR 1.50 ISO IC908 2 N1 5991115 2240.00'
+        const iscarProductRegex = /(.+?)\s+(\d{6,8})\s+([\d,]+(?:\.\d{2})?)(?:\s{3,}|$)/g;
+        let iscarMatch: RegExpExecArray | null;
+        let foundIscar = false;
+
+        while ((iscarMatch = iscarProductRegex.exec(line)) !== null) {
           const prefix = iscarMatch[1].trim();
           const catNr = iscarMatch[2].trim();
           const price = parseFloat(iscarMatch[3].replace(/,/g, ''));
 
-          if (price > 0) {
-            // Strip trailing S.C. and Disc codes (e.g. '3 N1', '2 2B', '3A') from description name
+          if (prefix && price > 0 && prefix.length < 80) {
             const cleanedName = prefix
               .replace(/\s+\d\s+[A-Z0-9]{1,4}$/i, '')
               .replace(/\s+[A-Z0-9]{1,4}$/i, '')
@@ -254,12 +274,12 @@ export async function POST(request: Request) {
               description: null,
               price,
             });
-            continue;
+            foundIscar = true;
           }
         }
+        if (foundIscar) continue;
 
-        // Match Standard Tabular format: [Sr.No] [Item No / Cat No] [Description] [Price]
-        // Example: '1 ART123 End Mill 10mm 1,500.00'
+        // 3. Standard Tabular Format: [Sr.No] [Art.No/ItemNo] [Description] [Price]
         const stdMatch = line.match(/^(\d+)\s+(\S+)\s+(.+?)\s+([\d,]+(?:\.\d{2})?)$/);
         if (stdMatch) {
           const artNo = stdMatch[2].trim();
@@ -269,23 +289,6 @@ export async function POST(request: Request) {
             validItems.push({
               name: itemName,
               itemNumber: artNo,
-              sku: null,
-              description: null,
-              price,
-            });
-            continue;
-          }
-        }
-
-        // Generic fallback: [Description] [Price]
-        const fallbackMatch = line.match(/^(.+?)\s+([\d,]+(?:\.\d{2})?)$/);
-        if (fallbackMatch) {
-          const itemName = fallbackMatch[1].trim();
-          const price = parseFloat(fallbackMatch[2].replace(/,/g, ''));
-          if (itemName && itemName.length > 2 && !isNaN(price) && price > 0) {
-            validItems.push({
-              name: itemName,
-              itemNumber: null,
               sku: null,
               description: null,
               price,
