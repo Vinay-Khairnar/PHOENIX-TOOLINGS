@@ -3,8 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { PDFDocument, rgb, StandardFonts, PDFImage, PageSizes } from 'pdf-lib';
 import * as fs from 'fs';
 import * as path from 'path';
-import { COMPANY_STAMP_BASE64 } from '@/lib/stampBase64';
-import { PARTNER_LOGOS_BASE64 } from '@/lib/logosBase64';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -81,75 +79,46 @@ export async function GET(
       headerLogoImage = await pdfDoc.embedPng(headerLogoBytes);
     }
 
-    // Load individual partner logos (in-memory Base64 primary, filesystem fallback)
+    // Load individual partner logos from public/logos/
     const logoNames = ['iscar', 'ctc', 'regofix', 'hnti', 'addison'];
     const loadedLogos: { name: string; image: any }[] = [];
+    const logosDir = path.join(process.cwd(), 'public', 'logos');
     for (const logoName of logoNames) {
       let logoImage: any = null;
-
-      // 1. Try Base64 constant first (100% reliable in production/serverless)
-      const b64 = PARTNER_LOGOS_BASE64[logoName];
-      if (b64) {
+      for (const ext of ['png', 'jpg']) {
         try {
-          const buf = Buffer.from(b64, 'base64');
-          logoImage = await pdfDoc.embedPng(buf);
+          const logoPath = path.join(logosDir, `${logoName}.${ext}`);
+          if (fs.existsSync(logoPath)) {
+            const logoBytes = fs.readFileSync(logoPath);
+            logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+            break;
+          }
         } catch (e) { }
       }
-
-      // 2. Fallback to filesystem if needed
-      if (!logoImage) {
-        const logosDir = path.join(process.cwd(), 'public', 'logos');
-        for (const ext of ['png', 'jpg']) {
-          try {
-            const logoPath = path.join(logosDir, `${logoName}.${ext}`);
-            if (fs.existsSync(logoPath)) {
-              const logoBytes = fs.readFileSync(logoPath);
-              logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
-              break;
-            }
-          } catch (e) { }
-        }
-      }
-
       if (logoImage) {
         loadedLogos.push({ name: logoName, image: logoImage });
       }
     }
 
-    // Embed company stamp (in-memory Base64 primary, filesystem fallback)
+    // Load company stamp from public/ or public/logos/
     let stampImage: any = null;
+    const stampCandidates = [
+      path.join(process.cwd(), 'public', 'company-stamp.png'),
+      path.join(process.cwd(), 'public', 'logos', 'company-stamp.png'),
+      path.join(process.cwd(), 'public', 'company-stamp.jpg'),
+      path.join(process.cwd(), 'public', 'logos', 'company-stamp.jpg'),
+    ];
 
-    // 1. Try Base64 constant first (100% reliable across all environments)
-    if (COMPANY_STAMP_BASE64) {
+    for (const p of stampCandidates) {
       try {
-        const buf = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
-        stampImage = await pdfDoc.embedJpg(buf);
-      } catch (e1) {
-        try {
-          const buf = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
-          stampImage = await pdfDoc.embedPng(buf);
-        } catch (e2) {
-          console.warn('Base64 stamp embed failed:', e2);
-        }
-      }
-    }
-
-    // 2. Fallback to filesystem if not already loaded
-    if (!stampImage) {
-      const stampCandidates = [
-        path.join(process.cwd(), 'public', 'company-stamp.jpg'),
-        path.join(process.cwd(), 'public', 'company-stamp.png'),
-        path.join(process.cwd(), 'public', 'company-stamp.jpeg'),
-      ];
-      for (const p of stampCandidates) {
-        try {
-          if (fs.existsSync(p)) {
-            const bytes = fs.readFileSync(p);
-            stampImage = await pdfDoc.embedJpg(bytes).catch(() => pdfDoc.embedPng(bytes));
+        if (fs.existsSync(p)) {
+          const bytes = fs.readFileSync(p);
+          if (bytes && bytes.length > 0) {
+            stampImage = p.endsWith('.png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
             if (stampImage) break;
           }
-        } catch (e) { }
-      }
+        }
+      } catch (e) { }
     }
 
     const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
