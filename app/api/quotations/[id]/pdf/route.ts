@@ -4,6 +4,7 @@ import { PDFDocument, rgb, StandardFonts, PDFImage, PageSizes } from 'pdf-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { COMPANY_STAMP_BASE64 } from '@/lib/stampBase64';
+import { PARTNER_LOGOS_BASE64 } from '@/lib/logosBase64';
 
 function formatIndianCurrency(num: number): string {
   const rounded = Math.round(num).toString();
@@ -77,58 +78,74 @@ export async function GET(
       headerLogoImage = await pdfDoc.embedPng(headerLogoBytes);
     }
 
-    // Load individual partner logos from public/logos/
+    // Load individual partner logos (in-memory Base64 primary, filesystem fallback)
     const logoNames = ['iscar', 'ctc', 'regofix', 'hnti', 'addison'];
     const loadedLogos: { name: string; image: any }[] = [];
     for (const logoName of logoNames) {
-      const logosDir = path.join(process.cwd(), 'public', 'logos');
       let logoImage: any = null;
-      for (const ext of ['png', 'jpg']) {
+
+      // 1. Try Base64 constant first (100% reliable in production/serverless)
+      const b64 = PARTNER_LOGOS_BASE64[logoName];
+      if (b64) {
         try {
-          const logoPath = path.join(logosDir, `${logoName}.${ext}`);
-          const logoBytes = fs.readFileSync(logoPath);
-          logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
-          break;
+          const buf = Buffer.from(b64, 'base64');
+          logoImage = await pdfDoc.embedPng(buf);
         } catch (e) { }
       }
+
+      // 2. Fallback to filesystem if needed
+      if (!logoImage) {
+        const logosDir = path.join(process.cwd(), 'public', 'logos');
+        for (const ext of ['png', 'jpg']) {
+          try {
+            const logoPath = path.join(logosDir, `${logoName}.${ext}`);
+            if (fs.existsSync(logoPath)) {
+              const logoBytes = fs.readFileSync(logoPath);
+              logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+              break;
+            }
+          } catch (e) { }
+        }
+      }
+
       if (logoImage) {
         loadedLogos.push({ name: logoName, image: logoImage });
       }
     }
 
-    // Pre-embed company stamp with multi-tier fallback (File -> Base64)
+    // Embed company stamp (in-memory Base64 primary, filesystem fallback)
     let stampImage: any = null;
-    let stampBytes: Buffer | null = null;
 
-    const stampCandidates = [
-      path.join(process.cwd(), 'public', 'company-stamp.jpg'),
-      path.join(process.cwd(), 'public', 'company-stamp.png'),
-      path.join(process.cwd(), 'public', 'company-stamp.jpeg'),
-    ];
-    for (const p of stampCandidates) {
+    // 1. Try Base64 constant first (100% reliable across all environments)
+    if (COMPANY_STAMP_BASE64) {
       try {
-        if (fs.existsSync(p)) {
-          stampBytes = fs.readFileSync(p);
-          if (stampBytes && stampBytes.length > 0) break;
-        }
-      } catch (e) { }
-    }
-
-    if (!stampBytes || stampBytes.length === 0) {
-      try {
-        stampBytes = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
-      } catch (e) { }
-    }
-
-    if (stampBytes && stampBytes.length > 0) {
-      try {
-        stampImage = await pdfDoc.embedJpg(stampBytes);
+        const buf = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
+        stampImage = await pdfDoc.embedJpg(buf);
       } catch (e1) {
         try {
-          stampImage = await pdfDoc.embedPng(stampBytes);
+          const buf = Buffer.from(COMPANY_STAMP_BASE64, 'base64');
+          stampImage = await pdfDoc.embedPng(buf);
         } catch (e2) {
-          console.error('Failed to embed stamp image:', e2);
+          console.warn('Base64 stamp embed failed:', e2);
         }
+      }
+    }
+
+    // 2. Fallback to filesystem if not already loaded
+    if (!stampImage) {
+      const stampCandidates = [
+        path.join(process.cwd(), 'public', 'company-stamp.jpg'),
+        path.join(process.cwd(), 'public', 'company-stamp.png'),
+        path.join(process.cwd(), 'public', 'company-stamp.jpeg'),
+      ];
+      for (const p of stampCandidates) {
+        try {
+          if (fs.existsSync(p)) {
+            const bytes = fs.readFileSync(p);
+            stampImage = await pdfDoc.embedJpg(bytes).catch(() => pdfDoc.embedPng(bytes));
+            if (stampImage) break;
+          }
+        } catch (e) { }
       }
     }
 
