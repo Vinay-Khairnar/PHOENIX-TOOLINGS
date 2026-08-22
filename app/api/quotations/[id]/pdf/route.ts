@@ -6,6 +6,9 @@ import * as path from 'path';
 import { COMPANY_STAMP_BASE64 } from '@/lib/stampBase64';
 import { PARTNER_LOGOS_BASE64 } from '@/lib/logosBase64';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function formatIndianCurrency(num: number): string {
   const rounded = Math.round(num).toString();
   let lastThree = rounded.substring(rounded.length - 3);
@@ -700,6 +703,9 @@ export async function GET(
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `inline; filename="${fallbackAscii}"; filename*=UTF-8''${encodedFilename}`,
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
 

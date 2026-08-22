@@ -11,7 +11,7 @@ export function DownloadQuoteButton({ id, quoteNumber }: { id: string, quoteNumb
     setIsDownloading(true);
     const toastId = toast.loading('Generating PDF...');
     try {
-      const response = await fetch(`/api/quotations/${id}/pdf`);
+      const response = await fetch(`/api/quotations/${id}/pdf`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to generate PDF');
       
       const blob = await response.blob();
