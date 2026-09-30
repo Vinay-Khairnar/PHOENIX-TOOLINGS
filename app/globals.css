@@ -39,3 +39,29 @@
     display: none;
   }
 }
+
+/* Modal animations */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.animate-modal-backdrop {
+  animation: modal-backdrop-in 0.2s ease-out both;
+}
+.animate-modal-panel {
+  animation: modal-panel-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}

@@ -1,0 +1,724 @@
+import { NextResponse } from 'next/server';
+import { PDFDocument, rgb, StandardFonts, PageSizes } from 'pdf-lib';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export const dynamic = 'force-dynamic';
+
+function formatIndianCurrency(num: number): string {
+  const rounded = Math.round(num).toString();
+  let lastThree = rounded.substring(rounded.length - 3);
+  const otherNumbers = rounded.substring(0, rounded.length - 3);
+  if (otherNumbers != '') {
+    lastThree = ',' + lastThree;
+  }
+  const res = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + lastThree;
+  return res;
+}
+
+function hexColor(hex: string) {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  return rgb(r, g, b);
+}
+
+// Sample/dummy data for the preview
+const SAMPLE_QUOTE = {
+  quoteNumber: 'PT/25-26/001',
+  createdAt: new Date().toISOString(),
+  refNumber: 'AS PER VISIT',
+  refDate: new Date().toISOString(),
+  customerName: 'M/S. SAMPLE ENGINEERING PVT. LTD.',
+  customerAddress: 'Plot No. 42, MIDC Industrial Area, Pune - 411 018, Maharashtra, India.',
+  contactPerson: 'Mr. Rajesh Kumar',
+  discount: 0,
+  items: [
+    { itemNumber: 'SCLCR-1212', name: 'TOOL HOLDER SCLCR 1212 F09', make: 'ISCAR', drgNumber: 'DRG-001', quantity: 2, price: 3500, discount: 0 },
+    { itemNumber: 'CCMT-09T3', name: 'INSERT CCMT 09T3 08-SM IC907', make: 'ISCAR', drgNumber: 'DRG-002', quantity: 10, price: 850, discount: 5 },
+    { itemNumber: 'ER32-12MM', name: 'COLLET ER32 12MM', make: 'REGOFIX', drgNumber: '', quantity: 5, price: 1200, discount: 0 },
+    { itemNumber: 'BB-S25', name: 'BORING BAR S25S-SCLCR-09', make: 'CTC', drgNumber: 'DRG-004', quantity: 1, price: 12500, discount: 10 },
+  ],
+};
+
+export async function POST(request: Request) {
+  try {
+    const settings = await request.json();
+    const quote = SAMPLE_QUOTE;
+
+    // Create PDF
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont((StandardFonts as any).Helvetica);
+    const boldFont = await pdfDoc.embedFont((StandardFonts as any).HelveticaBold);
+
+    let letterheadBytes;
+    try {
+      letterheadBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'letterHead.png'));
+    } catch (e) { }
+
+    let letterheadImage: any;
+    if (letterheadBytes) {
+      letterheadImage = await pdfDoc.embedPng(letterheadBytes);
+    }
+
+    let headerLogoBytes;
+    try {
+      headerLogoBytes = fs.readFileSync(path.join(process.cwd(), 'public', 'headerLogo.png'));
+    } catch (e) { }
+
+    let headerLogoImage: any;
+    if (headerLogoBytes) {
+      headerLogoImage = await pdfDoc.embedPng(headerLogoBytes);
+    }
+
+    // Load individual partner logos from public/logos/
+    const logoNames = ['iscar', 'ctc', 'regofix', 'hnti', 'addison'];
+    const loadedLogos: { name: string; image: any }[] = [];
+    const logosDir = path.join(process.cwd(), 'public', 'logos');
+    for (const logoName of logoNames) {
+      let logoImage: any = null;
+      for (const ext of ['png', 'jpg']) {
+        try {
+          const logoPath = path.join(logosDir, `${logoName}.${ext}`);
+          if (fs.existsSync(logoPath)) {
+            const logoBytes = fs.readFileSync(logoPath);
+            logoImage = ext === 'jpg' ? await pdfDoc.embedJpg(logoBytes) : await pdfDoc.embedPng(logoBytes);
+            break;
+          }
+        } catch (e) { }
+      }
+      if (logoImage) {
+        loadedLogos.push({ name: logoName, image: logoImage });
+      }
+    }
+
+    // Load company stamp from public/ or public/logos/
+    let stampImage: any = null;
+    const stampCandidates = [
+      path.join(process.cwd(), 'public', 'company-stamp.png'),
+      path.join(process.cwd(), 'public', 'logos', 'company-stamp.png'),
+      path.join(process.cwd(), 'public', 'company-stamp.jpg'),
+      path.join(process.cwd(), 'public', 'logos', 'company-stamp.jpg'),
+    ];
+
+    for (const p of stampCandidates) {
+      try {
+        if (fs.existsSync(p)) {
+          const bytes = fs.readFileSync(p);
+          if (bytes && bytes.length > 0) {
+            stampImage = p.endsWith('.png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+            if (stampImage) break;
+          }
+        }
+      } catch (e) { }
+    }
+
+    const [A4_WIDTH, A4_HEIGHT] = PageSizes.A4;
+
+    const CONTENT_WIDTH = 550;
+    const MARGIN_LEFT = 10;
+    const TOP_MARGIN = A4_HEIGHT - 105;
+    const ITEMS_PER_PAGE = 12;
+
+    // Global Totals Calculation
+    let globalSubtotal = 0;
+    for (const item of quote.items) {
+      const itemDiscount = item.discount || 0;
+      const netPrice = item.price * (1 - itemDiscount / 100);
+      globalSubtotal += netPrice * item.quantity;
+    }
+    const discountAmount = globalSubtotal * ((quote.discount || 0) / 100);
+    const taxableAmount = globalSubtotal - discountAmount;
+    const gstAmt = taxableAmount * 0.18;
+    const grandTotal = taxableAmount + gstAmt;
+
+    const chunks = [];
+    if (quote.items.length === 0) chunks.push([]);
+    for (let i = 0; i < quote.items.length; i += ITEMS_PER_PAGE) {
+      chunks.push(quote.items.slice(i, i + ITEMS_PER_PAGE));
+    }
+
+    for (let pageIndex = 0; pageIndex < chunks.length; pageIndex++) {
+      const currentChunk = chunks[pageIndex];
+      let page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+      let y = TOP_MARGIN;
+
+      const addBackground = () => {
+        if (letterheadImage) {
+          page.drawImage(letterheadImage, {
+            x: 0,
+            y: 0,
+            width: A4_WIDTH,
+            height: A4_HEIGHT,
+          });
+        }
+        if (headerLogoImage) {
+          const dims = headerLogoImage.scaleToFit(200, 80);
+          page.drawImage(headerLogoImage, {
+            x: MARGIN_LEFT + CONTENT_WIDTH - dims.width,
+            y: A4_HEIGHT - dims.height - 15,
+            width: dims.width,
+            height: dims.height,
+          });
+        }
+      };
+
+      addBackground();
+
+      const drawGridCell = (text: string, x: number, yPos: number, w: number, h: number, f: any, size: number, align: 'left' | 'center' | 'right' = 'left', drawBox = true) => {
+        if (drawBox) {
+          page.drawRectangle({ x, y: yPos - h, width: w, height: h, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+        }
+        if (text) {
+          const textWidth = f.widthOfTextAtSize(text, size);
+          let textX = x + 3;
+          if (align === 'center') textX = x + (w - textWidth) / 2;
+          if (align === 'right') textX = x + w - textWidth - 3;
+          const textY = yPos - h / 2 - size / 3;
+          page.drawText(text, { x: textX, y: textY, size, font: f });
+        }
+      }
+
+      // 1. QUOTATION Title
+      const quotationTitleStr = "QUOTATION";
+      const quotationTitleWidth = boldFont.widthOfTextAtSize(quotationTitleStr, 14);
+      page.drawText(quotationTitleStr, {
+        x: MARGIN_LEFT + (CONTENT_WIDTH - quotationTitleWidth) / 2,
+        y: A4_HEIGHT - 20,
+        size: 14,
+        font: boldFont
+      });
+      const titlePadX = 15;
+      const titlePadY = 5;
+      const capsuleW = quotationTitleWidth + titlePadX * 2;
+      const capsuleH = 14 + titlePadY * 2;
+      const capsuleR = capsuleH / 2;
+      const capsuleX = MARGIN_LEFT + (CONTENT_WIDTH - capsuleW) / 2;
+      const capsuleTopY = A4_HEIGHT - 22 - titlePadY + capsuleH;
+      const capsulePath = `M ${capsuleR},0 L ${capsuleW - capsuleR},0 A ${capsuleR},${capsuleR} 0 0,1 ${capsuleW - capsuleR},${capsuleH} L ${capsuleR},${capsuleH} A ${capsuleR},${capsuleR} 0 0,1 ${capsuleR},0 Z`;
+      page.drawSvgPath(capsulePath, { x: capsuleX, y: capsuleTopY, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+
+      // Company info lines below QUOTATION title
+      const rawAddress = (settings?.address || "A-51 MIDC WALUJ, AURANGABAD - 431 136, MAHARASTRA, INDIA.").toUpperCase();
+      let addressLines: string[] = [];
+      if (rawAddress.includes('\n')) {
+        addressLines = rawAddress.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      } else {
+        const commaParts = rawAddress.split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (commaParts.length >= 2) {
+          let line1 = commaParts[0];
+          let splitIdx = 1;
+          for (let i = 1; i < commaParts.length - 1; i++) {
+            if ((line1 + ", " + commaParts[i]).length <= 40) {
+              line1 += ", " + commaParts[i];
+              splitIdx = i + 1;
+            } else {
+              break;
+            }
+          }
+          addressLines = [
+            line1 + ",",
+            commaParts.slice(splitIdx).join(', ')
+          ];
+        } else {
+          const words = rawAddress.split(' ');
+          const mid = Math.ceil(words.length / 2);
+          addressLines = [
+            words.slice(0, mid).join(' '),
+            words.slice(mid).join(' ')
+          ];
+        }
+      }
+
+      const infoFontSize = 8;
+      let infoY = A4_HEIGHT - 60;
+      const infoStartX = MARGIN_LEFT + 15;
+      const labelColor = hexColor('#D51947');
+
+      const worksText = "WORKS";
+      const callText = "CALL";
+      const emailText = "E-mail";
+
+      const maxLabelTextWidth = Math.max(
+        boldFont.widthOfTextAtSize(worksText, infoFontSize),
+        boldFont.widthOfTextAtSize(callText, infoFontSize),
+        boldFont.widthOfTextAtSize(emailText, infoFontSize)
+      );
+
+      const colonX = infoStartX + maxLabelTextWidth + 8;
+      const valueX = colonX + boldFont.widthOfTextAtSize(":", infoFontSize) + 8;
+
+      // Draw WORKS
+      page.drawText(worksText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(addressLines[0] || '', { x: valueX, y: infoY, size: infoFontSize, font: font });
+      infoY -= 12;
+
+      for (let i = 1; i < addressLines.length; i++) {
+        page.drawText(addressLines[i], { x: valueX, y: infoY, size: infoFontSize, font: font });
+        infoY -= 12;
+      }
+
+      // Draw CALL
+      const callValue = settings?.phone || "+91 9890448625 / +91 9766791555";
+      page.drawText(callText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(callValue, { x: valueX, y: infoY, size: infoFontSize, font: font });
+      infoY -= 12;
+
+      // Draw E-mail
+      const emailValue = settings?.email || "gbs@phoenixtoolings.com / mayur@phoenixtoolings.com";
+      page.drawText(emailText, { x: infoStartX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(":", { x: colonX, y: infoY, size: infoFontSize, font: boldFont, color: labelColor });
+      page.drawText(emailValue, { x: valueX, y: infoY, size: infoFontSize, font: font });
+
+      // Separator line
+      const separatorY = infoY - 8;
+      const sepLineWidth = CONTENT_WIDTH * 0.70;
+      const sepStartX = MARGIN_LEFT + (CONTENT_WIDTH - sepLineWidth) / 2;
+      page.drawLine({
+        start: { x: sepStartX, y: separatorY },
+        end: { x: sepStartX + sepLineWidth, y: separatorY },
+        thickness: 0.75,
+        color: rgb(0.5, 0.5, 0.5)
+      });
+      y = separatorY - 8;
+
+      // 2. Info Block
+      const leftWidth = CONTENT_WIDTH * 0.61;
+      const rightWidth = CONTENT_WIDTH - leftWidth;
+      const row2Height = 62;
+
+      const leftPad = MARGIN_LEFT + 5;
+      page.drawText("TO,", { x: leftPad, y: y - 11, size: 9, font: font });
+      page.drawText(quote.customerName || '', { x: leftPad, y: y - 23, size: 9.5, font: boldFont });
+
+      // Format customer address
+      const maxAddrWidth = leftWidth - 10;
+      const getAddressLines = (raw: string, maxLines = 3): string[] => {
+        if (!raw) return [];
+        const rawTrimmed = raw.trim();
+        if (rawTrimmed.includes('\n')) {
+          const rawLines = rawTrimmed.split('\n').map(s => s.trim()).filter(Boolean);
+          if (rawLines.length <= maxLines) return rawLines;
+          const result = rawLines.slice(0, maxLines - 1);
+          const remaining = rawLines.slice(maxLines - 1).join(' ');
+          result.push(remaining);
+          return result;
+        }
+        const commaParts = rawTrimmed.split(',').map(s => s.trim()).filter(Boolean);
+        if (commaParts.length >= 3) {
+          const lines: string[] = [];
+          let currentLine = '';
+          const targetPartCount = Math.ceil(commaParts.length / maxLines);
+          let partsInCurrent = 0;
+          for (let i = 0; i < commaParts.length; i++) {
+            const part = commaParts[i];
+            const isLast = i === commaParts.length - 1;
+            const partWithComma = isLast ? part : `${part},`;
+            const testLine = currentLine ? `${currentLine} ${partWithComma}` : partWithComma;
+            if (
+              (lines.length < maxLines - 1 && (partsInCurrent >= targetPartCount || font.widthOfTextAtSize(testLine, 9) > maxAddrWidth * 0.7)) ||
+              font.widthOfTextAtSize(testLine, 9) > maxAddrWidth
+            ) {
+              if (currentLine) {
+                lines.push(currentLine);
+                currentLine = partWithComma;
+                partsInCurrent = 1;
+              } else {
+                lines.push(testLine);
+                currentLine = '';
+                partsInCurrent = 0;
+              }
+            } else {
+              currentLine = testLine;
+              partsInCurrent++;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+          if (lines.length > maxLines) {
+            const trimmedLines = lines.slice(0, maxLines - 1);
+            trimmedLines.push(lines.slice(maxLines - 1).join(' '));
+            return trimmedLines;
+          }
+          return lines;
+        }
+        const words = rawTrimmed.split(/\s+/);
+        const lines: string[] = [];
+        let curLine = '';
+        for (const word of words) {
+          const testLine = curLine ? `${curLine} ${word}` : word;
+          if (font.widthOfTextAtSize(testLine, 9) <= maxAddrWidth) {
+            curLine = testLine;
+          } else {
+            if (curLine) lines.push(curLine);
+            curLine = word;
+          }
+        }
+        if (curLine) lines.push(curLine);
+        if (lines.length > maxLines) {
+          const trimmedLines = lines.slice(0, maxLines - 1);
+          trimmedLines.push(lines.slice(maxLines - 1).join(' '));
+          return trimmedLines;
+        }
+        return lines;
+      };
+
+      const customerAddrLines = getAddressLines(quote.customerAddress || '', 3);
+      let addrY = y - 35;
+      for (const line of customerAddrLines) {
+        page.drawText(line, { x: leftPad, y: addrY, size: 9, font: font });
+        addrY -= 11;
+      }
+
+      // Right Content
+      const rightX = MARGIN_LEFT + leftWidth;
+      const rightRowH = 14;
+
+      const qtnDate = new Date(quote.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+      const refDate = new Date(quote.refDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+
+      const rightLabels = ["QUOTATION NO.", "DATE", "REF NO.", "REF DATE."];
+      const maxRightLabelWidth = Math.max(...rightLabels.map((l: string) => font.widthOfTextAtSize(l, 9)));
+      const rightColonX = rightX + 3 + maxRightLabelWidth + 8;
+      const rightValueX = rightColonX + font.widthOfTextAtSize(":", 9) + 12;
+
+      const drawRightCell = (label: string, val: string, index: number) => {
+        const rowY = y - index * rightRowH;
+        page.drawText(label, { x: rightX + 3, y: rowY - 12, size: 9, font: font });
+        page.drawText(":", { x: rightColonX, y: rowY - 12, size: 9, font: font });
+        if (val) {
+          page.drawText(val, { x: rightValueX, y: rowY - 12, size: 9, font: font });
+        }
+      }
+
+      drawRightCell("QUOTATION NO.", quote.quoteNumber, 0);
+      drawRightCell("DATE", qtnDate, 1);
+      drawRightCell("REF NO.", quote.refNumber || "AS PER VISIT", 2);
+      drawRightCell("REF DATE.", refDate, 3);
+
+      y -= row2Height;
+
+      // 3. KIND ATTN
+      const row3Height = 20;
+      const kindAttnLabel = "KIND ATTN : ";
+      page.drawText(kindAttnLabel, { x: MARGIN_LEFT + 5, y: y - 13, size: 9, font: font });
+      const kindAttnLabelWidth = font.widthOfTextAtSize(kindAttnLabel, 9);
+      page.drawText(quote.contactPerson || '', { x: MARGIN_LEFT + 5 + kindAttnLabelWidth, y: y - 13, size: 9, font: boldFont });
+      y -= row3Height;
+
+      // 4. Reference
+      const row4Height = 30;
+      const refLine1 = "We thank you very much for your valued enquiry.";
+      const refLine2 = "We are pleased to submit our best quotation for your potential requirement, as detailed below:";
+      page.drawText(refLine1, { x: MARGIN_LEFT + 5, y: y - 11, size: 9, font: font });
+      page.drawText(refLine2, { x: MARGIN_LEFT + 5, y: y - 23, size: 9, font: font });
+      y -= row4Height;
+
+      // 5. Table Header
+      const headerHeight = 18;
+      const headers = ["SR. NO.", "ITEM NO.", "DESCRIPTION", "MAKE", "DRG. NO.", "QTY", "PRICE", "DISC.", "NET PRICE", "TOTAL"];
+      const colWidths = [35, 60, 125, 60, 45, 30, 50, 35, 55, 55];
+      let curX = MARGIN_LEFT;
+      for (let i = 0; i < headers.length; i++) {
+        drawGridCell(headers[i], curX, y, colWidths[i], headerHeight, boldFont, 8, 'center');
+        curX += colWidths[i];
+      }
+      y -= headerHeight;
+
+      const numRows = ITEMS_PER_PAGE;
+      const rowHeight = 22;
+      const tableBodyHeight = numRows * rowHeight;
+
+      // Draw outer rectangle for the whole table body and vertical column lines
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      let vertX = MARGIN_LEFT;
+      for (let j = 0; j < colWidths.length - 1; j++) {
+        vertX += colWidths[j];
+        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0, 0, 0) });
+      }
+
+      for (let i = 0; i < numRows; i++) {
+        const item = currentChunk[i];
+        let rowTexts = ["", "", "", "", "", "", "", "", "", ""];
+
+        if (item) {
+          const itemDiscount = item.discount || 0;
+          const netPrice = item.price * (1 - itemDiscount / 100);
+          const amount = netPrice * item.quantity;
+          const srNo = pageIndex * ITEMS_PER_PAGE + i + 1;
+          rowTexts = [
+            srNo.toString(),
+            item.itemNumber || "",
+            item.name || "",
+            item.make ? item.make.toUpperCase().split(' ')[0] : "",
+            item.drgNumber || "",
+            item.quantity.toString(),
+            formatIndianCurrency(item.price),
+            itemDiscount > 0 ? `${itemDiscount}%` : "",
+            formatIndianCurrency(netPrice),
+            formatIndianCurrency(amount)
+          ];
+        }
+
+        let curRowX = MARGIN_LEFT;
+        for (let j = 0; j < colWidths.length; j++) {
+          if (rowTexts[j]) {
+            let align: 'left' | 'center' | 'right' = 'left';
+            if (j === 0 || j === 1 || j === 3 || j === 4 || j === 5 || j === 7) align = 'center';
+            if (j === 6 || j === 8 || j === 9) align = 'right';
+
+            const breakText = (str: string, maxW: number) => {
+              const res = [];
+              let cur = "";
+              for (let charIndex = 0; charIndex < str.length; charIndex++) {
+                if (font.widthOfTextAtSize(cur + str[charIndex], 9) > maxW) {
+                  const lastSpace = cur.lastIndexOf(' ');
+                  if (lastSpace > 0 && lastSpace > cur.length / 2) {
+                    res.push(cur.substring(0, lastSpace).trim());
+                    cur = cur.substring(lastSpace + 1) + str[charIndex];
+                  } else {
+                    res.push(cur.trim());
+                    cur = str[charIndex];
+                  }
+                } else {
+                  cur += str[charIndex];
+                }
+              }
+              if (cur.trim()) res.push(cur.trim());
+              return res;
+            };
+
+            const lines = breakText(rowTexts[j], colWidths[j] - 6);
+
+            let textY = y - 14;
+            for (const l of lines) {
+              const tWidth = font.widthOfTextAtSize(l, 9);
+              let textX = curRowX + 3;
+              if (align === 'center') textX = curRowX + (colWidths[j] - tWidth) / 2;
+              if (align === 'right') textX = curRowX + colWidths[j] - tWidth - 3;
+
+              page.drawText(l, { x: textX, y: textY, size: 9, font: font });
+              textY -= 10;
+            }
+          }
+          curRowX += colWidths[j];
+        }
+        y -= rowHeight;
+      }
+
+      // 7. Bank Details & Totals
+      const bankBoxWidth = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5] + colWidths[6];
+      const totalsBoxWidth = CONTENT_WIDTH - bankBoxWidth;
+      const summaryHeight = 60;
+
+      const isLastPage = pageIndex === chunks.length - 1;
+
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - summaryHeight, width: CONTENT_WIDTH, height: summaryHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y }, end: { x: MARGIN_LEFT + bankBoxWidth, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
+
+      const bankPad = MARGIN_LEFT + 5;
+      const gstStr = `GST NO-${settings?.gstNumber || '27AFWPG3321F1ZH'}`;
+      page.drawText(gstStr, { x: bankPad, y: y - 44, size: 12, font: boldFont });
+
+      const drawTaxRow = (rowY: number, label: string, amountStr: string, isBold = false, rowLabelColor?: any) => {
+        const f = isBold ? boldFont : font;
+        const opts1: any = { x: MARGIN_LEFT + bankBoxWidth + 3, y: rowY - 14, size: 9, font: f };
+        if (rowLabelColor) opts1.color = rowLabelColor;
+        page.drawText(label, opts1);
+
+        const w = f.widthOfTextAtSize(amountStr, 9);
+        const opts2: any = { x: MARGIN_LEFT + CONTENT_WIDTH - w - 3, y: rowY - 14, size: 9, font: f };
+        page.drawText(amountStr, opts2);
+      };
+
+      if (isLastPage) {
+        const totalLabelW = colWidths[7] + colWidths[8];
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y }, end: { x: MARGIN_LEFT + bankBoxWidth + totalLabelW, y: y - summaryHeight }, thickness: 1, color: rgb(0, 0, 0) });
+
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - 20 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - 20 }, thickness: 1, color: rgb(0, 0, 0) });
+        page.drawLine({ start: { x: MARGIN_LEFT + bankBoxWidth, y: y - 40 }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: y - 40 }, thickness: 1, color: rgb(0, 0, 0) });
+
+        drawTaxRow(y, "TAXABLE AMOUNT", formatIndianCurrency(taxableAmount), true);
+        drawTaxRow(y - 20, "GST 18%", formatIndianCurrency(gstAmt));
+        drawTaxRow(y - 40, "TOTAL AMOUNT", formatIndianCurrency(grandTotal), true, labelColor);
+      } else {
+        const contText = "Continued on next page...";
+        page.drawText(contText, { x: MARGIN_LEFT + bankBoxWidth + (totalsBoxWidth - font.widthOfTextAtSize(contText, 10)) / 2, y: y - summaryHeight / 2 - 5, size: 10, font: font });
+      }
+
+      y -= summaryHeight;
+
+      // Spacing
+      y -= 15;
+
+      // 8. Terms & Conditions
+      const termsHeight = 140;
+
+      page.drawText("Terms and Condition :", { x: MARGIN_LEFT + 5, y: y - 14, size: 10, font: boldFont });
+
+      const defaultTerms = [
+        { label: "1) GST", value: ": 18%" },
+        { label: "2) Delivery", value: ": Two Weeks from the date of receipt of purchase order" },
+        { label: "3) Payment", value: ": 100% Against Proforma" },
+        { label: "4) Validity", value: ": 1 Week" },
+        { label: "5) P & F Extra", value: ": NA" },
+        { label: "6) Insurance", value: ": At your end" },
+        { label: "7) Note", value: ": 18% interest will be charged on the value of invoice, If not paid within 30 days from the date of invoice." },
+      ];
+
+      let structuredTerms: { label: string; value: string }[] = [];
+      const rawTerms = (settings?.termsAndConditions || "").split('\n').filter(Boolean);
+      for (const line of rawTerms) {
+        const match = line.match(/^(\d+\)\s*[^:]+)\s*:\s*(.*)$/);
+        if (match) {
+          structuredTerms.push({ label: match[1].trim(), value: ": " + match[2].trim() });
+        }
+      }
+      if (structuredTerms.length === 0) {
+        structuredTerms = defaultTerms;
+      }
+
+      const termLabelX = MARGIN_LEFT + 5;
+      const termValueX = MARGIN_LEFT + 105;
+      let termY = y - 20;
+      const termRowH = 15;
+      for (const term of structuredTerms) {
+        page.drawText(term.label, { x: termLabelX, y: termY - 12, size: 9, font: boldFont, color: labelColor });
+        const maxValueWidth = bankBoxWidth - 115;
+        if (font.widthOfTextAtSize(term.value, 9) > maxValueWidth) {
+          const colonOffset = font.widthOfTextAtSize(": ", 9);
+          let line1 = "";
+          for (let c = 0; c < term.value.length; c++) {
+            if (font.widthOfTextAtSize(line1 + term.value[c], 9) > maxValueWidth) {
+              const lastSpace = line1.lastIndexOf(' ');
+              if (lastSpace > 0) {
+                page.drawText(line1.substring(0, lastSpace), { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(line1.substring(lastSpace + 1) + term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              } else {
+                page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+                termY -= termRowH;
+                page.drawText(term.value.substring(c), { x: termValueX + colonOffset, y: termY - 12, size: 9, font: font });
+              }
+              break;
+            }
+            line1 += term.value[c];
+            if (c === term.value.length - 1) {
+              page.drawText(line1, { x: termValueX, y: termY - 12, size: 9, font: font });
+            }
+          }
+        } else {
+          page.drawText(term.value, { x: termValueX, y: termY - 12, size: 9, font: font });
+        }
+        termY -= termRowH;
+      }
+
+      // Right side sign
+      const signX = MARGIN_LEFT + bankBoxWidth;
+      const forText = "FOR, ";
+      const companyNameText = settings?.companyName || 'PHOENIX TOOLINGS';
+      const forWidth = font.widthOfTextAtSize(forText, 10);
+      const companyWidth = boldFont.widthOfTextAtSize(companyNameText, 10);
+      const totalTitleWidth = forWidth + companyWidth;
+
+      const titleStartX = signX + (totalsBoxWidth - totalTitleWidth) / 2;
+      page.drawText(forText, { x: titleStartX, y: y - 36, size: 10, font: font });
+      page.drawText(companyNameText, { x: titleStartX + forWidth, y: y - 36, size: 10, font: boldFont });
+
+      // Draw company stamp
+      if (stampImage) {
+        const stampDims = stampImage.scaleToFit(110, 55);
+        const stampDrawX = signX + (totalsBoxWidth - stampDims.width) / 2;
+        const stampDrawY = y - 96;
+        page.drawImage(stampImage, {
+          x: stampDrawX,
+          y: stampDrawY,
+          width: stampDims.width,
+          height: stampDims.height,
+        });
+      }
+
+      const signText = "Authorised Signatory";
+      page.drawText(signText, { x: signX + (totalsBoxWidth - font.widthOfTextAtSize(signText, 10)) / 2, y: y - 108, size: 10, font: font });
+
+      y -= termsHeight;
+
+      // 9. Hope Text
+      y -= 15;
+      const hopeText = "We hope you find the above quotation attractive and look forward to receiving your valuable order.";
+      page.drawText(hopeText, {
+        x: MARGIN_LEFT + (CONTENT_WIDTH - boldFont.widthOfTextAtSize(hopeText, 9)) / 2,
+        y: y,
+        size: 9,
+        font: boldFont
+      });
+
+      // 10. Authorized Channel Partners
+      y -= 35;
+
+      const titleStr = "AUTHORIZED CHANNEL PARTNER";
+      page.drawText(titleStr, { x: MARGIN_LEFT, y, size: 9, font: boldFont });
+      page.drawLine({ start: { x: MARGIN_LEFT, y: y - 2 }, end: { x: MARGIN_LEFT + boldFont.widthOfTextAtSize(titleStr, 9), y: y - 2 }, thickness: 1, color: rgb(0, 0, 0) });
+      y -= 10;
+
+      if (loadedLogos.length > 0) {
+        const logoSizes: Record<string, { maxW: number; maxH: number }> = {
+          iscar: { maxW: 75, maxH: 26 },
+          ctc: { maxW: 95, maxH: 24 },
+          regofix: { maxW: 95, maxH: 18 },
+          hnti: { maxW: 75, maxH: 33 },
+          addison: { maxW: 58, maxH: 26 },
+        };
+
+        const maxBannerH = 34;
+        const logoDims: { image: any; w: number; h: number }[] = [];
+        let totalLogosWidth = 0;
+
+        for (const logo of loadedLogos) {
+          const size = logoSizes[logo.name] || { maxW: 80, maxH: 26 };
+          const dims = logo.image.scaleToFit(size.maxW, size.maxH);
+          logoDims.push({ image: logo.image, w: dims.width, h: dims.height });
+          totalLogosWidth += dims.width;
+        }
+
+        const logoGap = 22;
+        const totalGroupWidth = totalLogosWidth + (loadedLogos.length - 1) * logoGap;
+        let currentX = MARGIN_LEFT + (CONTENT_WIDTH - totalGroupWidth) / 2;
+
+        for (const item of logoDims) {
+          const logoY = y - maxBannerH + (maxBannerH - item.h) / 2;
+          page.drawImage(item.image, {
+            x: currentX,
+            y: logoY,
+            width: item.w,
+            height: item.h,
+          });
+          currentX += item.w + logoGap;
+        }
+      } else {
+        const partnersText = "ISCAR   |   CTC PRECISION   |   REGO-FIX   |   HNTI OIL   |   ADDISON";
+        page.drawText(partnersText, { x: MARGIN_LEFT, y: y - 10, size: 10, font: boldFont });
+      }
+
+    } // End of page loop
+
+    const pdfBytes = await pdfDoc.save();
+
+    return new Response(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': 'inline; filename="preview.pdf"',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
+
+  } catch (error) {
+    console.error(error);
+    return new NextResponse('Internal Server Error', { status: 500 });
+  }
+}
