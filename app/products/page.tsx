@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/format';
 import ImportModal from '@/app/components/ImportModal';
 import AddProductModal from '@/app/components/AddProductModal';
 import EditProductModal from '@/app/components/EditProductModal';
+import DeleteByMakeModal from '@/app/components/DeleteByMakeModal';
 import { Plus } from 'lucide-react';
 
 interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; drawingNumber?: string | null; }
@@ -17,6 +18,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isDeleteByMakeOpen, setIsDeleteByMakeOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -106,17 +108,26 @@ export default function ProductsPage() {
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           {products.length > 0 && (
-            <button 
-              onClick={handleDeleteAll}
-              disabled={isDeletingAll}
-              className="flex items-center gap-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm disabled:opacity-50 flex-1 sm:flex-none justify-center"
-            >
-              {isDeletingAll ? (
-                <><Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" /> Deleting...</>
-              ) : (
-                <><Trash2 className="w-5 h-5 sm:w-4 sm:h-4" /> Delete All</>
-              )}
-            </button>
+            <>
+              <button 
+                onClick={() => setIsDeleteByMakeOpen(true)}
+                disabled={isDeletingAll}
+                className="flex items-center gap-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm disabled:opacity-50 flex-1 sm:flex-none justify-center"
+              >
+                <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" /> Delete by Make
+              </button>
+              <button 
+                onClick={handleDeleteAll}
+                disabled={isDeletingAll}
+                className="flex items-center gap-2 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 px-5 py-3 sm:py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm disabled:opacity-50 flex-1 sm:flex-none justify-center"
+              >
+                {isDeletingAll ? (
+                  <><Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" /> Deleting...</>
+                ) : (
+                  <><Trash2 className="w-5 h-5 sm:w-4 sm:h-4" /> Delete All</>
+                )}
+              </button>
+            </>
           )}
           <button 
             onClick={() => setIsAddModalOpen(true)}
@@ -150,6 +161,15 @@ export default function ProductsPage() {
         isOpen={!!editingProduct}
         onClose={() => setEditingProduct(null)}
         onSuccess={() => { fetchProducts(search, page); setEditingProduct(null); }}
+      />
+
+      <DeleteByMakeModal
+        isOpen={isDeleteByMakeOpen}
+        onClose={() => setIsDeleteByMakeOpen(false)}
+        onSuccess={() => {
+          setPage(1);
+          fetchProducts(search, 1);
+        }}
       />
 
       <div className="bg-transparent sm:bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-slate-200 overflow-hidden">

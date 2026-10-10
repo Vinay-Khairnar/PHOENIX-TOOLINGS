@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     const CONTENT_WIDTH = 550;
     const MARGIN_LEFT = 10;
     const TOP_MARGIN = A4_HEIGHT - 105;
-    const ITEMS_PER_PAGE = 12;
+    const ITEMS_PER_PAGE = 8;
 
     // Global Totals Calculation
     let globalSubtotal = 0;
@@ -428,27 +428,43 @@ export async function POST(request: Request) {
       y -= headerHeight;
 
       const numRows = ITEMS_PER_PAGE;
-      const rowHeight = 22;
-      const tableBodyHeight = numRows * rowHeight;
+      const MAX_DESC_LINES = 3; // Description text limited to 3 lines max
+      const MIN_ROW_HEIGHT = 22; // Compact height for single-line or empty rows
+      const LINE_HEIGHT = 10; // Vertical spacing between text lines
+      const ROW_PADDING = 12; // Top+bottom padding within each row
 
-      // Draw outer rectangle for the whole table body and vertical column lines
-      page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
-      let vertX = MARGIN_LEFT;
-      for (let j = 0; j < colWidths.length - 1; j++) {
-        vertX += colWidths[j];
-        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0, 0, 0) });
-      }
+      // Helper: break text into lines that fit within maxW pixels
+      const breakText = (str: string, maxW: number) => {
+        const res: string[] = [];
+        let cur = "";
+        for (let charIndex = 0; charIndex < str.length; charIndex++) {
+          if (font.widthOfTextAtSize(cur + str[charIndex], 9) > maxW) {
+            const lastSpace = cur.lastIndexOf(' ');
+            if (lastSpace > 0 && lastSpace > cur.length / 2) {
+              res.push(cur.substring(0, lastSpace).trim());
+              cur = cur.substring(lastSpace + 1) + str[charIndex];
+            } else {
+              res.push(cur.trim());
+              cur = str[charIndex];
+            }
+          } else {
+            cur += str[charIndex];
+          }
+        }
+        if (cur.trim()) res.push(cur.trim());
+        return res;
+      };
 
+      // Pre-compute all row data and dynamic heights
+      const rowDataList: { texts: string[]; descLines: number; height: number }[] = [];
       for (let i = 0; i < numRows; i++) {
         const item = currentChunk[i];
-        let rowTexts = ["", "", "", "", "", "", "", "", "", ""];
-
         if (item) {
           const itemDiscount = item.discount || 0;
           const netPrice = item.price * (1 - itemDiscount / 100);
           const amount = netPrice * item.quantity;
           const srNo = pageIndex * ITEMS_PER_PAGE + i + 1;
-          rowTexts = [
+          const texts = [
             srNo.toString(),
             item.itemNumber || "",
             item.name || "",
@@ -460,39 +476,61 @@ export async function POST(request: Request) {
             formatIndianCurrency(netPrice),
             formatIndianCurrency(amount)
           ];
+          // Calculate description line count to determine row height
+          let descLines = breakText(texts[2], colWidths[2] - 6);
+          if (descLines.length > MAX_DESC_LINES) descLines = descLines.slice(0, MAX_DESC_LINES);
+          const numLines = Math.max(1, descLines.length);
+          const neededHeight = ROW_PADDING + numLines * LINE_HEIGHT;
+          rowDataList.push({ texts, descLines: numLines, height: Math.max(MIN_ROW_HEIGHT, neededHeight) });
+        } else {
+          rowDataList.push({ texts: ["", "", "", "", "", "", "", "", "", ""], descLines: 0, height: MIN_ROW_HEIGHT });
         }
+      }
+      const tableBodyHeight = rowDataList.reduce((sum, r) => sum + r.height, 0);
+
+      // Draw outer rectangle for the whole table body
+      page.drawRectangle({ x: MARGIN_LEFT, y: y - tableBodyHeight, width: CONTENT_WIDTH, height: tableBodyHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+      // Draw vertical column lines
+      let vertX = MARGIN_LEFT;
+      for (let j = 0; j < colWidths.length - 1; j++) {
+        vertX += colWidths[j];
+        page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0, 0, 0) });
+      }
+      // Draw horizontal row separator lines
+      let sepY = y;
+      for (let i = 0; i < numRows - 1; i++) {
+        sepY -= rowDataList[i].height;
+        page.drawLine({ start: { x: MARGIN_LEFT, y: sepY }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: sepY }, thickness: 0.5, color: rgb(0, 0, 0) });
+      }
+
+      // Render text in each row
+      for (let i = 0; i < numRows; i++) {
+        const rowData = rowDataList[i];
+        const rowHeight = rowData.height;
 
         let curRowX = MARGIN_LEFT;
         for (let j = 0; j < colWidths.length; j++) {
-          if (rowTexts[j]) {
+          if (rowData.texts[j]) {
             let align: 'left' | 'center' | 'right' = 'left';
             if (j === 0 || j === 1 || j === 3 || j === 4 || j === 5 || j === 7) align = 'center';
             if (j === 6 || j === 8 || j === 9) align = 'right';
 
-            const breakText = (str: string, maxW: number) => {
-              const res = [];
-              let cur = "";
-              for (let charIndex = 0; charIndex < str.length; charIndex++) {
-                if (font.widthOfTextAtSize(cur + str[charIndex], 9) > maxW) {
-                  const lastSpace = cur.lastIndexOf(' ');
-                  if (lastSpace > 0 && lastSpace > cur.length / 2) {
-                    res.push(cur.substring(0, lastSpace).trim());
-                    cur = cur.substring(lastSpace + 1) + str[charIndex];
-                  } else {
-                    res.push(cur.trim());
-                    cur = str[charIndex];
-                  }
-                } else {
-                  cur += str[charIndex];
-                }
+            let lines = breakText(rowData.texts[j], colWidths[j] - 6);
+
+            // Limit description (column index 2) to MAX_DESC_LINES, truncate with '...'
+            if (j === 2 && lines.length > MAX_DESC_LINES) {
+              lines = lines.slice(0, MAX_DESC_LINES);
+              const lastLine = lines[MAX_DESC_LINES - 1];
+              let trimmed = lastLine;
+              while (font.widthOfTextAtSize(trimmed + '...', 9) > colWidths[j] - 6 && trimmed.length > 0) {
+                trimmed = trimmed.slice(0, -1);
               }
-              if (cur.trim()) res.push(cur.trim());
-              return res;
-            };
+              lines[MAX_DESC_LINES - 1] = trimmed + '...';
+            }
 
-            const lines = breakText(rowTexts[j], colWidths[j] - 6);
-
-            let textY = y - 14;
+            // Vertically center text block within the dynamic row height
+            const textBlockHeight = lines.length * LINE_HEIGHT;
+            let textY = y - (rowHeight - textBlockHeight) / 2 - 8;
             for (const l of lines) {
               const tWidth = font.widthOfTextAtSize(l, 9);
               let textX = curRowX + 3;
@@ -500,7 +538,7 @@ export async function POST(request: Request) {
               if (align === 'right') textX = curRowX + colWidths[j] - tWidth - 3;
 
               page.drawText(l, { x: textX, y: textY, size: 9, font: font });
-              textY -= 10;
+              textY -= LINE_HEIGHT;
             }
           }
           curRowX += colWidths[j];
