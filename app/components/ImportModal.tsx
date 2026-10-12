@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, ChevronDown, Loader2, FileText, CheckCircle2, Download, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { createClient } from '@/lib/supabase/client';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -17,10 +18,18 @@ const MAKE_OPTIONS = [
   'ADDISON'
 ];
 
+// Files larger than 4MB go through Supabase Storage to bypass Vercel's 4.5MB limit
+const DIRECT_UPLOAD_LIMIT = 4 * 1024 * 1024; // 4 MB
+
+const PDF_PAGE_BATCH_SIZE = 75; // ~75 pages (~10,000 products) per chunk for fast, reliable ingestion
+
 export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
   const [selectedMake, setSelectedMake] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [progressPercent, setProgressPercent] = useState<number | null>(null);
+  const [batchStats, setBatchStats] = useState<{ currentBatch: number; totalBatches: number; importedCount: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -38,6 +47,16 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     e.target.value = '';
   };
 
+  const cleanupTempStorage = async (path: string) => {
+    try {
+      const cleanForm = new FormData();
+      cleanForm.append('action', 'cleanup');
+      cleanForm.append('storagePath', path);
+      cleanForm.append('make', 'CLEANUP');
+      await fetch('/api/products/import', { method: 'POST', body: cleanForm });
+    } catch (e) {}
+  };
+
   const handleSubmit = async () => {
     if (!selectedMake) {
       toast.error('Please select a Make before submitting.');
@@ -49,31 +68,159 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     }
 
     setIsUploading(true);
-    const loadingToast = toast.loading('Importing products...');
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('make', selectedMake.toUpperCase());
+    setProgressPercent(null);
+    setBatchStats(null);
+    const loadingToast = toast.loading('Preparing import...');
 
     try {
-      const res = await fetch('/api/products/import', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      toast.success('Products imported successfully!', { id: loadingToast });
+      const isPdf = selectedFile.name.toLowerCase().endsWith('.pdf');
+
+      if (selectedFile.size > DIRECT_UPLOAD_LIMIT || isPdf) {
+        // Large file or PDF: upload to Supabase Storage first, then process in batches
+        setUploadProgress('Uploading file to storage...');
+        setProgressPercent(10);
+        toast.loading('Uploading file to storage...', { id: loadingToast });
+        
+        const supabase = createClient();
+        const timestamp = Date.now();
+        const safeName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = `temp/${timestamp}_${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('imports')
+          .upload(storagePath, selectedFile, {
+            cacheControl: '60',
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error('Storage upload error:', uploadError);
+          throw new Error(`Failed to upload file: ${uploadError.message}`);
+        }
+
+        if (isPdf) {
+          // Multi-step Page-Range Batching: processes in fast, reliable chunks (e.g. 75 pages / ~10k items per request)
+          let pageStart = 1;
+          let totalImported = 0;
+          let totalPages = 0;
+          let isDone = false;
+          let currentBatch = 1;
+
+          while (!isDone) {
+            const pageEnd = pageStart + PDF_PAGE_BATCH_SIZE - 1;
+
+            if (totalPages > 0) {
+              const totalBatches = Math.ceil(totalPages / PDF_PAGE_BATCH_SIZE);
+              const percent = Math.min(99, Math.round(((pageStart - 1) / totalPages) * 100));
+              setProgressPercent(percent);
+              setBatchStats({ currentBatch, totalBatches, importedCount: totalImported });
+              setUploadProgress(`Importing pages ${pageStart}–${Math.min(pageEnd, totalPages)} of ${totalPages}...`);
+              toast.loading(`Importing pages ${pageStart}–${Math.min(pageEnd, totalPages)} of ${totalPages}...`, { id: loadingToast });
+            } else {
+              setUploadProgress(`Reading pages ${pageStart}–${pageEnd}...`);
+              setProgressPercent(20);
+            }
+
+            const chunkFormData = new FormData();
+            chunkFormData.append('storagePath', storagePath);
+            chunkFormData.append('fileName', selectedFile.name);
+            chunkFormData.append('make', selectedMake.toUpperCase());
+            chunkFormData.append('pageStart', String(pageStart));
+            chunkFormData.append('pageEnd', String(pageEnd));
+
+            const res = await fetch('/api/products/import', {
+              method: 'POST',
+              body: chunkFormData,
+            });
+
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}));
+              await cleanupTempStorage(storagePath);
+              throw new Error(errorData?.error || errorData?.details || 'Batch import failed');
+            }
+
+            const batchData = await res.json();
+            totalImported += batchData.batchImported || 0;
+            totalPages = batchData.totalPages || totalPages;
+            isDone = Boolean(batchData.done);
+
+            if (!isDone) {
+              pageStart = batchData.nextPageStart || (pageEnd + 1);
+              currentBatch++;
+            }
+          }
+
+          setProgressPercent(100);
+          setBatchStats(prev => prev ? { ...prev, importedCount: totalImported } : null);
+          toast.success(`Successfully imported ${totalImported.toLocaleString()} products!`, { id: loadingToast });
+        } else {
+          // Large Excel or CSV file
+          setUploadProgress('Processing spreadsheet products...');
+          setProgressPercent(50);
+          toast.loading('Processing products...', { id: loadingToast });
+
+          const formData = new FormData();
+          formData.append('storagePath', storagePath);
+          formData.append('fileName', selectedFile.name);
+          formData.append('make', selectedMake.toUpperCase());
+
+          const res = await fetch('/api/products/import', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            await cleanupTempStorage(storagePath);
+            throw new Error(errorData?.error || errorData?.details || 'Import failed');
+          }
+
+          const successData = await res.json().catch(() => ({}));
+          setProgressPercent(100);
+          toast.success(successData?.message || 'Products imported successfully!', { id: loadingToast });
+        }
+      } else {
+        // Small non-PDF file: direct upload
+        setUploadProgress('Uploading file...');
+        setProgressPercent(50);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('make', selectedMake.toUpperCase());
+
+        const res = await fetch('/api/products/import', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData?.error || errorData?.details || 'Upload failed');
+        }
+
+        const successData = await res.json().catch(() => ({}));
+        setProgressPercent(100);
+        toast.success(successData?.message || 'Products imported successfully!', { id: loadingToast });
+      }
+
       onSuccess();
-      handleClose(); // Close modal on success
-    } catch (error) {
+      handleClose();
+    } catch (error: any) {
       console.error(error);
-      toast.error('Error importing products.', { id: loadingToast });
+      toast.error(error?.message || 'Error importing products.', { id: loadingToast });
     } finally {
       setIsUploading(false);
+      setUploadProgress('');
+      setProgressPercent(null);
+      setBatchStats(null);
     }
   };
 
   const handleClose = () => {
+    if (isUploading) return;
     setSelectedMake('');
     setSelectedFile(null);
+    setProgressPercent(null);
+    setBatchStats(null);
     onClose();
   };
 
@@ -188,6 +335,38 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             />
           </div>
 
+          {/* Live Progress Card */}
+          {isUploading && (
+            <div className="bg-gradient-to-br from-indigo-50/90 via-indigo-50/50 to-purple-50/60 border border-indigo-100 rounded-xl p-4 space-y-2.5 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-indigo-900 flex items-center gap-2 truncate">
+                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600 shrink-0" />
+                  <span className="truncate">{uploadProgress || 'Importing products...'}</span>
+                </span>
+                {progressPercent !== null && (
+                  <span className="text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200/80 shadow-xs font-mono shrink-0 ml-2">
+                    {progressPercent}%
+                  </span>
+                )}
+              </div>
+
+              {/* Progress Bar Track */}
+              <div className="w-full bg-indigo-100/80 h-2.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 h-full rounded-full transition-all duration-300 ease-out"
+                  style={{ width: `${progressPercent !== null ? Math.max(5, progressPercent) : 100}%` }}
+                />
+              </div>
+
+              {batchStats && (
+                <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5 font-medium">
+                  <span>Batch {batchStats.currentBatch} of {batchStats.totalBatches || '?'}</span>
+                  <span className="text-indigo-700 font-semibold">{batchStats.importedCount.toLocaleString()} products imported</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Submit Button */}
           <div className="pt-4 border-t border-gray-100 mt-2">
             <button 
@@ -196,7 +375,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               className={`w-full flex items-center justify-center gap-2 bg-[#5B4AEB] hover:bg-[#4d3ddf] text-white py-3.5 px-6 rounded-xl transition-all font-semibold shadow-md active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 disabled:pointer-events-none`}
             >
               {isUploading ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> Importing Data...</>
+                <><Loader2 className="w-5 h-5 animate-spin" /> {uploadProgress || 'Importing Data...'}</>
               ) : (
                 <><CheckCircle2 className="w-5 h-5" /> Submit & Import</>
               )}

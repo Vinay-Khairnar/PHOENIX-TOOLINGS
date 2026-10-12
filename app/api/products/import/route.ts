@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import Papa from 'papaparse';
 import * as xlsx from 'xlsx';
+import fs from 'fs';
+
+// Next.js App Router route segment config
+export const maxDuration = 120; // seconds (for Vercel Pro/Enterprise; ignored locally)
+export const dynamic = 'force-dynamic';
 
 // --- Header Detection ---
 
@@ -161,31 +166,104 @@ function processWithHeaderIndex(
 
 // Cache buster for pdf-parse swap
 export async function POST(request: Request) {
+  let storagePath: string | null = null;
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const make = formData.get('make') as string;
-
-    if (!file || file.size === 0) {
-      return NextResponse.json({ error: 'No file uploaded or file is empty' }, { status: 400 });
+    // Quick cleanup action
+    if (formData.get('action') === 'cleanup') {
+      const cleanupPath = formData.get('storagePath') as string | null;
+      if (cleanupPath) {
+        await supabase.storage.from('imports').remove([cleanupPath]).catch(() => {});
+        const cachePath = `/tmp/${cleanupPath.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        try { fs.unlinkSync(cachePath); } catch (e) {}
+      }
+      return NextResponse.json({ success: true, message: 'Cleaned up storage' });
     }
+
+    const make = formData.get('make') as string;
 
     if (!make) {
       return NextResponse.json({ error: 'Make is required' }, { status: 400 });
     }
 
-    const buffer = await file.arrayBuffer();
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    const isPdf = file.name.endsWith('.pdf');
+    // Support two modes:
+    // 1. Direct file upload (formData contains 'file') - works for small files
+    // 2. Supabase Storage path (formData contains 'storagePath' + 'fileName') - for large files
+    let buffer: ArrayBuffer | null = null;
+    let fileName: string;
+
+    storagePath = formData.get('storagePath') as string | null;
+    const directFile = formData.get('file') as File | null;
+
+    if (storagePath) {
+      // Mode 2: Download or read from /tmp cache for fast chunked requests
+      const storageFileName = formData.get('fileName') as string;
+      if (!storageFileName) {
+        return NextResponse.json({ error: 'fileName is required when using storagePath' }, { status: 400 });
+      }
+
+      const cachePath = `/tmp/${storagePath.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      if (fs.existsSync(cachePath)) {
+        try {
+          const fileBuf = fs.readFileSync(cachePath);
+          buffer = fileBuf.buffer.slice(fileBuf.byteOffset, fileBuf.byteOffset + fileBuf.byteLength);
+        } catch (e) {
+          buffer = null;
+        }
+      }
+
+      if (!buffer) {
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from('imports')
+          .download(storagePath);
+
+        if (downloadError || !fileData) {
+          console.error('Storage download error:', downloadError);
+          return NextResponse.json({ error: 'Failed to download file from storage' }, { status: 500 });
+        }
+
+        buffer = await fileData.arrayBuffer();
+        try {
+          fs.writeFileSync(cachePath, Buffer.from(buffer));
+        } catch (e) {}
+      }
+
+      fileName = storageFileName;
+    } else if (directFile && directFile.size > 0) {
+      // Mode 1: Direct file upload
+      buffer = await directFile.arrayBuffer();
+      fileName = directFile.name;
+    } else {
+      return NextResponse.json({ error: 'No file uploaded or file is empty' }, { status: 400 });
+    }
+
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isPdf = fileName.endsWith('.pdf');
+    
+    // Check if client requested page-range batching for PDF
+    const pageStartRaw = formData.get('pageStart');
+    const pageEndRaw = formData.get('pageEnd');
+    const pageStart = pageStartRaw ? parseInt(String(pageStartRaw), 10) : null;
+    const pageEnd = pageEndRaw ? parseInt(String(pageEndRaw), 10) : null;
+    const isBatchedPdf = isPdf && pageStart !== null && pageEnd !== null;
+
     let rows: any[][] = [];
     let validItems: any[] = [];
     let skipped = 0;
+    let totalPdfPages = 0;
 
     if (isPdf) {
       const pdfParse = require('pdf-parse/lib/pdf-parse.js');
       const pdfBuffer = Buffer.from(buffer);
       
       function pagerender(pageData: any) {
+        if (isBatchedPdf && pageStart && pageEnd) {
+          const pageNum = pageData.pageNumber;
+          if (pageNum < pageStart || pageNum > pageEnd) {
+            return Promise.resolve('');
+          }
+        }
+
         return pageData.getTextContent({ normalizeWhitespace: true }).then((textContent: any) => {
           const rows: Record<number, Array<{ x: number; str: string }>> = {};
           for (const item of textContent.items) {
@@ -199,13 +277,19 @@ export async function POST(request: Request) {
           const lines: string[] = [];
           for (const y of sortedY) {
             const items = rows[y].sort((a, b) => a.x - b.x);
-            lines.push(items.map(it => it.str).join('   '));
+            lines.push(items.map((it: any) => it.str).join('   '));
           }
           return lines.join('\n');
         });
       }
 
-      const data = await pdfParse(pdfBuffer, { pagerender });
+      const parseOptions: any = { pagerender };
+      if (isBatchedPdf && pageEnd) {
+        parseOptions.max = pageEnd;
+      }
+
+      const data = await pdfParse(pdfBuffer, parseOptions);
+      totalPdfPages = data.numpages;
       const lines = data.text.split('\n').map((l: string) => l.trim()).filter(Boolean);
 
       for (const line of lines) {
@@ -306,7 +390,8 @@ export async function POST(request: Request) {
         const worksheet = workbook.Sheets[sheetName];
         rows = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
       } else {
-        const csvText = await file.text();
+        // Decode buffer to text for CSV parsing
+        const csvText = new TextDecoder().decode(buffer);
         const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: true });
         rows = parsed.data as any[][];
       }
@@ -322,26 +407,63 @@ export async function POST(request: Request) {
       validItems = validItems.map(item => ({ ...item, make: make.toUpperCase() }));
     }
 
-    // Insert in batches of 1000
+    // Insert in concurrent batches of 1000 for high performance
     const BATCH_SIZE = 1000;
+    const batches: any[][] = [];
     for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
-      const batch = validItems.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from('Product').insert(batch);
-      if (error) throw error;
+      batches.push(validItems.slice(i, i + BATCH_SIZE));
+    }
+
+    // Process up to 4 concurrent batch inserts
+    const CONCURRENCY = 4;
+    for (let i = 0; i < batches.length; i += CONCURRENCY) {
+      const chunk = batches.slice(i, i + CONCURRENCY);
+      await Promise.all(
+        chunk.map(async (batch) => {
+          const { error } = await supabase.from('Product').insert(batch);
+          if (error) throw error;
+        })
+      );
+    }
+
+    const isDone = !isBatchedPdf || (totalPdfPages > 0 && (pageEnd === null || pageEnd >= totalPdfPages));
+
+    // Clean up the temp file from Supabase Storage and /tmp cache when complete
+    if (storagePath && isDone) {
+      await supabase.storage.from('imports').remove([storagePath]).catch(() => {});
+      const cachePath = `/tmp/${storagePath.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      try { fs.unlinkSync(cachePath); } catch (e) {}
+    }
+
+    if (isBatchedPdf) {
+      return NextResponse.json({
+        success: true,
+        batchImported: validItems.length,
+        skipped,
+        pageStart,
+        pageEnd: Math.min(pageEnd!, totalPdfPages),
+        totalPages: totalPdfPages,
+        done: isDone,
+        nextPageStart: isDone ? null : pageEnd! + 1,
+        message: `Imported ${validItems.length} products from pages ${pageStart}–${Math.min(pageEnd!, totalPdfPages)}`,
+      });
     }
 
     return NextResponse.json({
+      success: true,
       message: `Imported ${validItems.length} products`,
+      imported: validItems.length,
       skipped,
     });
   } catch (error) {
     console.error(error);
-    try {
-      const errorStr = error instanceof Error ? error.stack : JSON.stringify(error);
-      require('fs').writeFileSync('/tmp/import-error.log', String(errorStr));
-    } catch(e) {}
+    if (storagePath) {
+      await supabase.storage.from('imports').remove([storagePath]).catch(() => {});
+      const cachePath = `/tmp/${storagePath.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      try { fs.unlinkSync(cachePath); } catch (e) {}
+    }
     return NextResponse.json(
-      { error: 'Failed to import products', details: error instanceof Error ? error.message : JSON.stringify(error), stack: error instanceof Error ? error.stack : undefined },
+      { error: 'Failed to import products', details: error instanceof Error ? error.message : JSON.stringify(error) },
       { status: 500 }
     );
   }

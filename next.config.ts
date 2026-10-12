@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Allow large file uploads (e.g. 21MB PDFs) through API routes
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
   // Allow access to remote image placeholder.
   images: {
     remotePatterns: [
