@@ -527,12 +527,6 @@ export async function GET(
         vertX += colWidths[j];
         page.drawLine({ start: { x: vertX, y: y }, end: { x: vertX, y: y - tableBodyHeight }, thickness: 1, color: rgb(0, 0, 0) });
       }
-      // Draw horizontal row separator lines
-      let sepY = y;
-      for (let i = 0; i < numRows - 1; i++) {
-        sepY -= rowDataList[i].height;
-        page.drawLine({ start: { x: MARGIN_LEFT, y: sepY }, end: { x: MARGIN_LEFT + CONTENT_WIDTH, y: sepY }, thickness: 0.5, color: rgb(0, 0, 0) });
-      }
 
       // Render text in each row
       for (let i = 0; i < numRows; i++) {
