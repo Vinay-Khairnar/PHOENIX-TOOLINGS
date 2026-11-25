@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuoteBuilder } from '@/store/quote-builder';
 import { Search, Plus, Trash2, FileText, Loader2, User, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
+import { QuotePreviewModal } from '@/app/components/QuotePreviewModal';
+import { downloadSavedQuotePdf } from '@/lib/download-quote-pdf';
 
 interface Product { id: string; name: string; itemNumber: string | null; price: number; make?: string | null; drawingNumber?: string | null; }
 interface Customer { id: string; name: string; email: string | null; phone: string | null; address: string | null; contactPerson: string | null; }
@@ -14,7 +16,8 @@ export default function Home() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [savingAction, setSavingAction] = useState<'save' | 'download' | null>(null);
   
   const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -35,6 +38,7 @@ export default function Home() {
     igst, setIgst,
     items, addItem, updateItemQuantity, updateItemDiscount, updateItemDrgNumber, removeItem, 
     discount, setDiscount,
+    termsAndConditions, setTermsAndConditions,
     reset 
   } = useQuoteBuilder();
 
@@ -105,7 +109,22 @@ export default function Home() {
   const total = taxableAmount + cgstAmount + sgstAmount + igstAmount;
 
 
-  const handleGenerate = async () => {
+  const previewQuoteData = useMemo(
+    () => ({
+      quoteNumber: quoteNumber.trim(),
+      quoteDate,
+      refNumber: refNumber.trim() || null,
+      refDate: refDate.trim() || null,
+      customerName: customerName.trim(),
+      customerAddress: customerAddress.trim() || null,
+      contactPerson: contactPerson.trim() || null,
+      discount,
+      items,
+    }),
+    [quoteNumber, quoteDate, refNumber, refDate, customerName, customerAddress, contactPerson, discount, items]
+  );
+
+  const handleOpenPreview = () => {
     if (!customerName.trim()) {
       toast.error('Please enter customer name.');
       return;
@@ -118,9 +137,12 @@ export default function Home() {
       toast.error('Please add at least one item to the quote.');
       return;
     }
+    setIsPreviewOpen(true);
+  };
 
-    setIsGenerating(true);
-    const loadingToast = toast.loading('Generating quotation...');
+  const persistQuote = async (termsText: string, shouldDownload: boolean) => {
+    setSavingAction(shouldDownload ? 'download' : 'save');
+    const loadingToast = toast.loading(shouldDownload ? 'Saving & generating PDF...' : 'Saving quotation...');
     try {
       const res = await fetch('/api/quotations', {
         method: 'POST',
@@ -140,43 +162,37 @@ export default function Home() {
           igst,
           items,
           discount,
-          total
-        })
+          total,
+          termsAndConditions: termsText,
+        }),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to save quote');
       }
       const quote = await res.json();
-      
-      reset();
-      
-      // Fetch and download PDF programmatically to avoid blank new tabs
-      try {
-        const pdfRes = await fetch(`/api/quotations/${quote.id}/pdf`);
-        if (pdfRes.ok) {
-          const blob = await pdfRes.blob();
-          const url = window.URL.createObjectURL(blob);
-          const safeQuoteNumber = (quote.quoteNumber || 'Quotation').replace(/\//g, '∕');
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${safeQuoteNumber}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
-        }
-      } catch (pdfError) {
-        console.error('Failed to download PDF:', pdfError);
+
+      if (shouldDownload) {
+        await downloadSavedQuotePdf(
+          quote.id,
+          quote.quoteNumber,
+          { ...previewQuoteData, termsAndConditions: termsText },
+          Boolean(quote.termsColumnMissing)
+        );
       }
-      
-      toast.success('Quotation generated successfully!', { id: loadingToast });
+
+      setIsPreviewOpen(false);
+      reset();
+      toast.success(
+        shouldDownload ? 'Quotation saved and PDF downloaded!' : 'Quotation saved successfully!',
+        { id: loadingToast }
+      );
       router.push(`/quotes/${quote.id}`);
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || 'Error generating quote', { id: loadingToast });
+      toast.error(error.message || 'Error saving quote', { id: loadingToast });
     } finally {
-      setIsGenerating(false);
+      setSavingAction(null);
     }
   };
 
@@ -512,24 +528,26 @@ export default function Home() {
         </div>
 
         <button 
-          onClick={handleGenerate}
-          disabled={!customerName.trim() || items.length === 0 || isGenerating}
+          onClick={handleOpenPreview}
+          disabled={!customerName.trim() || items.length === 0 || savingAction !== null}
           className="mt-6 w-full bg-[#0066cc] text-white rounded-full py-3 px-6 font-semibold text-[17px] hover:bg-[#0071e3] active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(0,102,204,0.39)] hover:shadow-[0_6px_20px_rgba(0,102,204,0.23)]"
         >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <FileText className="w-5 h-5" />
-              Generate PDF
-            </>
-          )}
+          <FileText className="w-5 h-5" />
+          Generate PDF
         </button>
       </div>
     </div>
+
+    <QuotePreviewModal
+      isOpen={isPreviewOpen}
+      quoteData={previewQuoteData}
+      initialTerms={termsAndConditions}
+      onTermsChange={setTermsAndConditions}
+      onClose={() => setIsPreviewOpen(false)}
+      onSaveOnly={(termsText) => persistQuote(termsText, false)}
+      onSaveAndDownload={(termsText) => persistQuote(termsText, true)}
+      savingAction={savingAction}
+    />
     </div>
   );
 }

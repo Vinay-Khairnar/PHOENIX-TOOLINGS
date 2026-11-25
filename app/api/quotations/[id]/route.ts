@@ -127,10 +127,31 @@ export async function PUT(
       updatePayload.createdAt = createdAt;
     }
 
-    const { error: quoteUpdateError } = await supabase
+    let termsColumnMissing = false;
+    if (typeof data.termsAndConditions === 'string') {
+      updatePayload.termsAndConditions = data.termsAndConditions;
+    }
+
+    let { error: quoteUpdateError } = await supabase
       .from('Quote')
       .update(updatePayload)
       .eq('id', id);
+
+    if (
+      quoteUpdateError &&
+      'termsAndConditions' in updatePayload &&
+      (quoteUpdateError.code === '42703' ||
+        quoteUpdateError.code === 'PGRST204' ||
+        quoteUpdateError.message?.includes('termsAndConditions'))
+    ) {
+      termsColumnMissing = true;
+      delete updatePayload.termsAndConditions;
+      const retry = await supabase
+        .from('Quote')
+        .update(updatePayload)
+        .eq('id', id);
+      quoteUpdateError = retry.error;
+    }
 
     if (quoteUpdateError) throw quoteUpdateError;
 
@@ -176,6 +197,7 @@ export async function PUT(
       customerEmail: completeQuote.Customer?.email,
       customerPhone: completeQuote.Customer?.phone,
       customerAddress: completeQuote.Customer?.address,
+      ...(termsColumnMissing ? { termsColumnMissing: true } : {}),
     };
 
     return NextResponse.json(mappedCompleteQuote);

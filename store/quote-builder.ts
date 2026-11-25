@@ -33,6 +33,7 @@ interface QuoteBuilderState {
   // Items
   items: QuoteBuilderItem[];
   discount: number;
+  termsAndConditions: string;
 
   // Actions
   setCustomerName: (name: string) => void;
@@ -53,6 +54,7 @@ interface QuoteBuilderState {
   updateItemDrgNumber: (productId: string, drgNumber: string) => void;
   removeItem: (productId: string) => void;
   setDiscount: (discount: number) => void;
+  setTermsAndConditions: (terms: string) => void;
   fillCustomer: (customer: { name: string; email?: string | null; phone?: string | null; address?: string | null }) => void;
   reset: () => void;
 }
@@ -77,6 +79,7 @@ export const useQuoteBuilder = create<QuoteBuilderState>((set) => ({
   igst: 0,
   items: [],
   discount: 0,
+  termsAndConditions: '',
 
   setCustomerName: (name) => set({ customerName: name }),
   setCustomerEmail: (email) => set({ customerEmail: email }),
@@ -127,6 +130,7 @@ export const useQuoteBuilder = create<QuoteBuilderState>((set) => ({
       items: state.items.filter((i) => i.productId !== productId),
     })),
   setDiscount: (discount) => set({ discount }),
+  setTermsAndConditions: (termsAndConditions) => set({ termsAndConditions }),
   fillCustomer: (customer) => set({
     customerName: customer.name,
     customerEmail: customer.email || '',
@@ -148,5 +152,6 @@ export const useQuoteBuilder = create<QuoteBuilderState>((set) => ({
     igst: 0,
     items: [],
     discount: 0,
+    termsAndConditions: '',
   }),
 }));

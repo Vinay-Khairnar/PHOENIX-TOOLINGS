@@ -97,24 +97,49 @@ export async function POST(request: Request) {
     }
 
     // Create quote
-    const { data: quote, error: quoteError } = await supabase
+    const quoteInsertPayload: Record<string, any> = {
+      quoteNumber: data.quoteNumber,
+      customerId: customerId,
+      discount: data.discount || 0,
+      total: data.total || 0,
+      contactPerson: data.contactPerson || null,
+      refNumber: data.refNumber || null,
+      refDate: data.refDate || null,
+      cgst: data.cgst ?? 9,
+      sgst: data.sgst ?? 9,
+      igst: data.igst ?? 0,
+      createdAt: createdAt,
+    };
+
+    let termsColumnMissing = false;
+    if (typeof data.termsAndConditions === 'string' && data.termsAndConditions.trim().length > 0) {
+      quoteInsertPayload.termsAndConditions = data.termsAndConditions;
+    }
+
+    let { data: quote, error: quoteError } = await supabase
       .from('Quote')
-      .insert({
-        quoteNumber: data.quoteNumber,
-        customerId: customerId,
-        discount: data.discount || 0,
-        total: data.total || 0,
-        contactPerson: data.contactPerson || null,
-        refNumber: data.refNumber || null,
-        refDate: data.refDate || null,
-        cgst: data.cgst ?? 9,
-        sgst: data.sgst ?? 9,
-        igst: data.igst ?? 0,
-        createdAt: createdAt,
-      })
+      .insert(quoteInsertPayload)
       .select()
       .single();
-      
+
+    if (
+      quoteError &&
+      'termsAndConditions' in quoteInsertPayload &&
+      (quoteError.code === '42703' ||
+        quoteError.code === 'PGRST204' ||
+        quoteError.message?.includes('termsAndConditions'))
+    ) {
+      termsColumnMissing = true;
+      delete quoteInsertPayload.termsAndConditions;
+      const retry = await supabase
+        .from('Quote')
+        .insert(quoteInsertPayload)
+        .select()
+        .single();
+      quote = retry.data;
+      quoteError = retry.error;
+    }
+
     if (quoteError) throw quoteError;
 
     // Create quote items
@@ -166,6 +191,7 @@ export async function POST(request: Request) {
       customerEmail: completeQuote.Customer?.email,
       customerPhone: completeQuote.Customer?.phone,
       customerAddress: completeQuote.Customer?.address,
+      ...(termsColumnMissing ? { termsColumnMissing: true } : {}),
     };
 
     return NextResponse.json(mappedCompleteQuote);

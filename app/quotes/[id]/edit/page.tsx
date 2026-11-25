@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, use } from 'react';
+import { useState, useEffect, useRef, use, useMemo } from 'react';
 import { Search, Plus, Trash2, FileText, Loader2, User, ArrowLeft, Check, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { formatCurrency } from '@/lib/format';
+import { QuotePreviewModal } from '@/app/components/QuotePreviewModal';
+import { downloadSavedQuotePdf } from '@/lib/download-quote-pdf';
 
 interface Product {
   id: string;
@@ -46,6 +48,9 @@ export default function EditQuotePage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [savingAction, setSavingAction] = useState<'save' | 'download' | null>(null);
+  const [termsAndConditions, setTermsAndConditions] = useState('');
 
   // Customer State
   const [customerName, setCustomerName] = useState('');
@@ -111,6 +116,7 @@ export default function EditQuotePage({
         setSgst(data.sgst ?? 9);
         setIgst(data.igst ?? 0);
         setDiscount(data.discount || 0);
+        setTermsAndConditions(data.termsAndConditions || '');
 
         if (Array.isArray(data.items)) {
           setItems(
@@ -230,23 +236,54 @@ export default function EditQuotePage({
   const igstAmount = taxableAmount * (igst / 100);
   const total = taxableAmount + cgstAmount + sgstAmount + igstAmount;
 
-  // Handle Save
-  const handleSave = async () => {
+  const previewQuoteData = useMemo(
+    () => ({
+      quoteNumber: quoteNumber.trim(),
+      quoteDate,
+      refNumber: refNumber.trim() || null,
+      refDate: refDate.trim() || null,
+      customerName: customerName.trim(),
+      customerAddress: customerAddress.trim() || null,
+      contactPerson: contactPerson.trim() || null,
+      discount,
+      items,
+    }),
+    [quoteNumber, quoteDate, refNumber, refDate, customerName, customerAddress, contactPerson, discount, items]
+  );
+
+  const validateForm = () => {
     if (!customerName.trim()) {
       toast.error('Please enter customer name.');
-      return;
+      return false;
     }
     if (!quoteNumber.trim()) {
       toast.error('Please enter a quote number.');
-      return;
+      return false;
     }
     if (items.length === 0) {
       toast.error('Please add at least one item to the quote.');
-      return;
+      return false;
     }
+    return true;
+  };
 
-    setIsSaving(true);
-    const loadingToast = toast.loading('Saving changes...');
+  const handleOpenPreview = () => {
+    if (!validateForm()) return;
+    setIsPreviewOpen(true);
+  };
+
+  // Handle Save
+  const persistChanges = async (termsText: string, shouldDownload: boolean, fromModal: boolean) => {
+    if (!validateForm()) return;
+
+    if (fromModal) {
+      setSavingAction(shouldDownload ? 'download' : 'save');
+    } else {
+      setIsSaving(true);
+    }
+    const loadingToast = toast.loading(
+      shouldDownload ? 'Saving & generating PDF...' : 'Saving changes...'
+    );
     try {
       const res = await fetch(`/api/quotations/${id}`, {
         method: 'PUT',
@@ -267,6 +304,7 @@ export default function EditQuotePage({
           items,
           discount,
           total,
+          ...(termsText.trim() ? { termsAndConditions: termsText } : {}),
         }),
       });
 
@@ -276,7 +314,21 @@ export default function EditQuotePage({
       }
 
       const updatedQuote = await res.json();
-      toast.success('Quotation updated successfully!', { id: loadingToast });
+
+      if (shouldDownload) {
+        await downloadSavedQuotePdf(
+          updatedQuote.id,
+          updatedQuote.quoteNumber,
+          { ...previewQuoteData, termsAndConditions: termsText },
+          Boolean(updatedQuote.termsColumnMissing)
+        );
+      }
+
+      setIsPreviewOpen(false);
+      toast.success(
+        shouldDownload ? 'Quotation updated and PDF downloaded!' : 'Quotation updated successfully!',
+        { id: loadingToast }
+      );
       router.push(`/quotes/${updatedQuote.id}`);
       router.refresh();
     } catch (error: any) {
@@ -284,8 +336,11 @@ export default function EditQuotePage({
       toast.error(error.message || 'Error updating quote', { id: loadingToast });
     } finally {
       setIsSaving(false);
+      setSavingAction(null);
     }
   };
+
+  const handleSave = () => persistChanges(termsAndConditions, false, false);
 
   if (isLoading) {
     return (
@@ -312,7 +367,7 @@ export default function EditQuotePage({
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Link
             href={`/quotes/${id}`}
             className="border border-[#e0e0e0] bg-white text-[#555] rounded-xl py-2.5 px-4 font-medium text-[14px] hover:bg-[#fafafc] transition-colors"
@@ -320,8 +375,17 @@ export default function EditQuotePage({
             Cancel
           </Link>
           <button
+            type="button"
+            onClick={handleOpenPreview}
+            disabled={!customerName.trim() || items.length === 0 || isSaving || savingAction !== null}
+            className="border border-[#0066cc] bg-white text-[#0066cc] rounded-xl py-2.5 px-4 font-semibold text-[14px] hover:bg-[#f0f7ff] active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" />
+            Generate PDF
+          </button>
+          <button
             onClick={handleSave}
-            disabled={!customerName.trim() || items.length === 0 || isSaving}
+            disabled={!customerName.trim() || items.length === 0 || isSaving || savingAction !== null}
             className="bg-[#0066cc] text-white rounded-xl py-2.5 px-5 font-semibold text-[14px] hover:bg-[#0071e3] active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 flex items-center gap-2 shadow-sm"
           >
             {isSaving ? (
@@ -706,26 +770,48 @@ export default function EditQuotePage({
               </div>
             </div>
 
-            <button
-              onClick={handleSave}
-              disabled={!customerName.trim() || items.length === 0 || isSaving}
-              className="mt-6 w-full bg-[#0066cc] text-white rounded-full py-3 px-6 font-semibold text-[17px] hover:bg-[#0071e3] active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(0,102,204,0.39)] hover:shadow-[0_6px_20px_rgba(0,102,204,0.23)]"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Saving Changes...
-                </>
-              ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  Update Quotation
-                </>
-              )}
-            </button>
+            <div className="mt-6 flex flex-col gap-2.5">
+              <button
+                type="button"
+                onClick={handleOpenPreview}
+                disabled={!customerName.trim() || items.length === 0 || isSaving || savingAction !== null}
+                className="w-full bg-[#0066cc] text-white rounded-full py-3 px-6 font-semibold text-[17px] hover:bg-[#0071e3] active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(0,102,204,0.39)] hover:shadow-[0_6px_20px_rgba(0,102,204,0.23)]"
+              >
+                <FileText className="w-5 h-5" />
+                Generate PDF
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!customerName.trim() || items.length === 0 || isSaving || savingAction !== null}
+                className="w-full bg-white text-[#0066cc] border border-[#0066cc]/30 rounded-full py-2.5 px-6 font-semibold text-[15px] hover:bg-[#f0f7ff] active:scale-95 transition-all disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving Changes...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Update Quotation Only
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      <QuotePreviewModal
+        isOpen={isPreviewOpen}
+        quoteData={previewQuoteData}
+        initialTerms={termsAndConditions}
+        onTermsChange={setTermsAndConditions}
+        onClose={() => setIsPreviewOpen(false)}
+        onSaveOnly={(termsText) => persistChanges(termsText, false, true)}
+        onSaveAndDownload={(termsText) => persistChanges(termsText, true, true)}
+        savingAction={savingAction}
+      />
     </div>
   );
 }
